@@ -1,147 +1,155 @@
 // src/screens/SplashScreen.js
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Animated, Dimensions,
-  StatusBar, Easing,
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Dimensions,
+  StatusBar,
+  Easing,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { COLORS } from '../data/theme';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// Each letter of FLICKS as individual animated unit
-const LETTERS = ['F', 'L', 'I', 'C', 'K', 'S'];
+// ─── Design Tokens ─────────────────────────────────────────────────────────────
+const C = {
+  red:       '#E50914',
+  redDeep:   '#B20710',
+  redGlow:   'rgba(229,9,20,0.35)',
+  redFaint:  'rgba(229,9,20,0.08)',
+  white:     '#FFFFFF',
+  offWhite:  '#E5E5E5',
+  silver:    '#A3A3A3',
+  dim:       'rgba(255,255,255,0.18)',
+  bg:        '#000000',
+};
 
-function AnimatedLetter({ char, index, totalLetters }) {
-  const isF = char === 'F';
+// ─── Responsive Scale ───────────────────────────────────────────────────────────
+const BASE = 390; // iPhone 14 Pro base width
+const scale  = (size) => (SW / BASE) * size;
+const vscale = (size) => (SH / 844) * size;
 
-  // Phase 1: slides in from left
-  const slideX     = useRef(new Animated.Value(-SW)).current;
-  // Phase 2: jump (scale up)
-  const scaleY     = useRef(new Animated.Value(1)).current;
-  const scaleX     = useRef(new Animated.Value(1)).current;
-  // Phase 3: rocket to right (fast)
+// ─── Logo Letter Component ──────────────────────────────────────────────────────
+function LogoLetter({ char, index, totalLetters }) {
+  const STAGGER    = 60;
+  const ENTRY_DUR  = 500;
+  const HOLD_DELAY = 300;
+  const EXIT_DUR   = 220;
+
+  // Animated values
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const scaleAnim  = useRef(new Animated.Value(0.4)).current;
+  const translateY = useRef(new Animated.Value(scale(40))).current;
   const exitX      = useRef(new Animated.Value(0)).current;
-  // Glow opacity
+  const exitOpacity = useRef(new Animated.Value(1)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
-  // Letter opacity
-  const letterOpacity = useRef(new Animated.Value(0)).current;
-
-  const STAGGER = 80; // ms between each letter entry
 
   useEffect(() => {
-    const delay = index * STAGGER;
+    const entryDelay = index * STAGGER;
+
+    // All letters stagger-reveal, then exit together after hold
+    const exitDelay = entryDelay + ENTRY_DUR + HOLD_DELAY;
+    const exitSlideDir = (index / (totalLetters - 1) - 0.5) * SW * 2.4;
 
     Animated.sequence([
-      // 1. Slide in from left slowly
+      Animated.delay(entryDelay),
+      // ENTRY: fade + scale up + slide up
       Animated.parallel([
-        Animated.timing(slideX, {
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: ENTRY_DUR * 0.5,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: ENTRY_DUR,
+          easing: Easing.out(Easing.back(1.4)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
           toValue: 0,
-          duration: 600,
-          delay,
+          duration: ENTRY_DUR,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(letterOpacity, {
-          toValue: 1,
-          duration: 300,
-          delay,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowOpacity, {
-          toValue: 1,
-          duration: 400,
-          delay: delay + 200,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 2. Brief pause then JUMP (squash & stretch)
-      Animated.parallel([
         Animated.sequence([
-          Animated.timing(scaleY, {
-            toValue: 1.6,
-            duration: 180,
-            easing: Easing.out(Easing.back(2)),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleY, {
-            toValue: 0.85,
-            duration: 100,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleY, {
+          Animated.delay(ENTRY_DUR * 0.4),
+          Animated.timing(glowOpacity, {
             toValue: 1,
-            duration: 120,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(scaleX, {
-            toValue: 0.7,
-            duration: 180,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleX, {
-            toValue: 1.1,
-            duration: 100,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleX, {
-            toValue: 1,
-            duration: 120,
+            duration: 280,
             useNativeDriver: true,
           }),
         ]),
       ]),
-      // 3. Pause on screen
-      Animated.delay(400),
-      // 4. ROCKET to the right FAST
+    ]).start();
+
+    // Exit: fan-out burst after hold
+    setTimeout(() => {
       Animated.parallel([
         Animated.timing(exitX, {
-          toValue: SW * 1.5,
-          duration: 280,
+          toValue: exitSlideDir,
+          duration: EXIT_DUR,
           easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(exitOpacity, {
+          toValue: 0,
+          duration: EXIT_DUR * 0.8,
+          delay: EXIT_DUR * 0.1,
           useNativeDriver: true,
         }),
         Animated.timing(glowOpacity, {
           toValue: 0,
-          duration: 200,
-          delay: 80,
+          duration: EXIT_DUR * 0.6,
           useNativeDriver: true,
         }),
-      ]),
-    ]).start();
+      ]).start();
+    }, exitDelay);
   }, []);
 
-  const letterStyle = {
-    transform: [
-      { translateX: Animated.add(slideX, exitX) },
-      { scaleY },
-      { scaleX },
-    ],
-    opacity: letterOpacity,
-  };
+  const isFirst = index === 0;
+  const letterFontSize = scale(SW < 360 ? 78 : SW < 430 ? 94 : 104);
 
   return (
-    <Animated.View style={[styles.letterWrap, letterStyle]}>
-      {/* Glow halo behind letter */}
+    <Animated.View
+      style={[
+        styles.letterWrap,
+        {
+          transform: [
+            { translateY },
+            { translateX: exitX },
+            { scale: scaleAnim },
+          ],
+          opacity: Animated.multiply(opacity, exitOpacity),
+        },
+      ]}
+    >
+      {/* Red glow behind first letter only, softer glow for rest */}
       <Animated.View
         style={[
           styles.letterGlow,
           {
             opacity: glowOpacity,
-            backgroundColor: isF ? COLORS.red : COLORS.accentGlow,
-            shadowColor: isF ? COLORS.red : COLORS.accent,
+            backgroundColor: isFirst ? C.redGlow : 'rgba(255,255,255,0.06)',
+            width: scale(isFirst ? 90 : 70),
+            height: scale(isFirst ? 120 : 110),
+            shadowColor: isFirst ? C.red : 'transparent',
           },
         ]}
       />
       <Text
         style={[
-          styles.letter,
-          isF
-            ? { color: COLORS.red, textShadowColor: COLORS.red, textShadowRadius: 18 }
-            : { color: COLORS.accent, textShadowColor: COLORS.accent, textShadowRadius: 12 },
+          styles.letterText,
+          {
+            fontSize: letterFontSize,
+            color: isFirst ? C.red : C.white,
+            textShadowColor: isFirst ? C.red : 'rgba(255,255,255,0.15)',
+            textShadowRadius: isFirst ? 24 : 8,
+          },
         ]}
+        allowFontScaling={false}
       >
         {char}
       </Text>
@@ -149,338 +157,438 @@ function AnimatedLetter({ char, index, totalLetters }) {
   );
 }
 
+// ─── Main Splash Screen ─────────────────────────────────────────────────────────
 export default function SplashScreen({ onDone }) {
-  const bgOpacity    = useRef(new Animated.Value(0)).current;
-  const lineWidth    = useRef(new Animated.Value(0)).current;
-  const subTextOpacity = useRef(new Animated.Value(0)).current;
-  const versionOpacity = useRef(new Animated.Value(0)).current;
-  const scanlineY    = useRef(new Animated.Value(-SH * 0.3)).current;
-  const progressW    = useRef(new Animated.Value(0)).current;
+  // Phase timings (ms)
+  const LOGO_STAGGER   = 60;
+  const LOGO_ENTRY_DUR = 500;
+  const LOGO_HOLD      = 300;
+  const LOGO_EXIT_DUR  = 220;
+  const LOGO_LAST_ENTRY = (5 * LOGO_STAGGER) + LOGO_ENTRY_DUR;
+  const LOGO_ALL_DONE  = LOGO_LAST_ENTRY + LOGO_HOLD + LOGO_EXIT_DUR;
 
-  const totalDuration = LETTERS.length * 80 + 600 + 180 + 400 + 280;
+  // After logo exits → Netflix-style F brandmark reveal
+  const BRAND_START    = LOGO_ALL_DONE + 200;
+  const BRAND_DUR      = 320;
+  const HOLD_TOTAL     = BRAND_START + BRAND_DUR + 900;
+
+  // Animated values – global scene
+  const bgOpacity      = useRef(new Animated.Value(0)).current;
+  const brandScale     = useRef(new Animated.Value(0.7)).current;
+  const brandOpacity   = useRef(new Animated.Value(0)).current;
+  const brandGlow      = useRef(new Animated.Value(0)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const taglineY       = useRef(new Animated.Value(scale(12))).current;
+  const progressAnim   = useRef(new Animated.Value(0)).current;
+  const fadeOut        = useRef(new Animated.Value(1)).current;
+
+  // Vignette pulse (subtle breathing)
+  const vignettePulse  = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    // Background fade in
+    // Scene fade-in
     Animated.timing(bgOpacity, {
       toValue: 1,
-      duration: 400,
+      duration: 350,
       useNativeDriver: true,
     }).start();
 
-    // Scan line moves down (CRT feel)
+    // Vignette pulse loop
     Animated.loop(
-      Animated.timing(scanlineY, {
-        toValue: SH,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
+      Animated.sequence([
+        Animated.timing(vignettePulse, {
+          toValue: 0.85,
+          duration: 1800,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vignettePulse, {
+          toValue: 0.6,
+          duration: 1800,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
     ).start();
 
-    // Top line draws in
-    setTimeout(() => {
-      Animated.timing(lineWidth, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: false,
-      }).start();
-    }, 200);
+    // Progress bar fills over full duration
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: HOLD_TOTAL - 200,
+      easing: Easing.inOut(Easing.quad),
+      useNativeDriver: false,
+    }).start();
 
-    // Subtitle appears
+    // Brand mark reveal after logo exits
     setTimeout(() => {
-      Animated.timing(subTextOpacity, {
-        toValue: 1,
-        duration: 500,
+      Animated.parallel([
+        Animated.spring(brandScale, {
+          toValue: 1,
+          speed: 14,
+          bounciness: 6,
+          useNativeDriver: true,
+        }),
+        Animated.timing(brandOpacity, {
+          toValue: 1,
+          duration: BRAND_DUR,
+          useNativeDriver: true,
+        }),
+        Animated.timing(brandGlow, {
+          toValue: 1,
+          duration: BRAND_DUR + 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Tagline enters after brand settles
+        Animated.parallel([
+          Animated.timing(taglineOpacity, {
+            toValue: 1,
+            duration: 360,
+            useNativeDriver: true,
+          }),
+          Animated.timing(taglineY, {
+            toValue: 0,
+            duration: 360,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    }, BRAND_START);
+
+    // Screen fade-out before navigation
+    const fadeTimer = setTimeout(() => {
+      Animated.timing(fadeOut, {
+        toValue: 0,
+        duration: 350,
         useNativeDriver: true,
-      }).start();
-    }, 800);
+      }).start(() => {
+        onDone && onDone();
+      });
+    }, HOLD_TOTAL);
 
-    // Progress bar
-    setTimeout(() => {
-      Animated.timing(progressW, {
-        toValue: 1,
-        duration: 1400,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: false,
-      }).start();
-    }, 600);
-
-    // Version label
-    setTimeout(() => {
-      Animated.timing(versionOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    }, 1000);
-
-    // Navigate to home
-    const timer = setTimeout(() => {
-      onDone && onDone();
-    }, totalDuration + 1200);
-
-    return () => clearTimeout(timer);
+    return () => clearTimeout(fadeTimer);
   }, []);
 
+  const LETTERS = ['F', 'L', 'I', 'C', 'K', 'S'];
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+    <Animated.View style={[styles.root, { opacity: fadeOut }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
 
-      {/* Deep background gradient */}
-      <LinearGradient
-        colors={['#010C09', '#021510', '#030F0C', '#000806']}
-        locations={[0, 0.3, 0.7, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* ── Base black background ── */}
+      <View style={StyleSheet.absoluteFill} />
 
-      {/* Radial glow spot behind letters */}
-      <View style={styles.glowSpot} />
+      {/* ── Deep gradient – subtle reddish tint at center ── */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}>
+        <LinearGradient
+          colors={['#0a0000', '#000000', '#000000', '#000000']}
+          locations={[0, 0.25, 0.75, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
 
-      {/* CRT scan line */}
+      {/* ── Radial vignette overlay ── */}
       <Animated.View
-        style={[styles.scanLine, { transform: [{ translateY: scanlineY }] }]}
+        style={[
+          styles.vignette,
+          {
+            opacity: vignettePulse,
+          },
+        ]}
         pointerEvents="none"
       />
 
-      {/* Particle dots */}
-      {[...Array(20)].map((_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.particle,
-            {
-              left: `${(i * 17 + 3) % 100}%`,
-              top: `${(i * 23 + 7) % 100}%`,
-              width: i % 3 === 0 ? 3 : 2,
-              height: i % 3 === 0 ? 3 : 2,
-              opacity: 0.1 + (i % 5) * 0.06,
-            },
-          ]}
-        />
-      ))}
+      {/* ── Red center bloom (behind logo area) ── */}
+      <Animated.View
+        style={[
+          styles.centerBloom,
+          { opacity: Animated.multiply(bgOpacity, 0.18) },
+        ]}
+        pointerEvents="none"
+      />
 
-      {/* Top HUD label */}
-      <Animated.View style={[styles.topHud, { opacity: bgOpacity }]}>
-        <Animated.View
-          style={[styles.hudLine, { width: lineWidth.interpolate({ inputRange: [0, 1], outputRange: [0, 80] }) }]}
-        />
-        <Text style={styles.hudText}>SYSTEM_INITIALIZING</Text>
-      </Animated.View>
-
-      {/* Main content area */}
-      <View style={styles.centerBlock}>
-        {/* Speed lines (decorative) */}
-        <View style={styles.speedLines} pointerEvents="none">
-          {[0, 1, 2].map(i => (
-            <View
-              key={i}
-              style={[
-                styles.speedLine,
-                { top: 10 + i * 14, width: 60 + i * 20, opacity: 0.15 + i * 0.08 },
-              ]}
-            />
-          ))}
-        </View>
-
-        {/* FLICKS letters */}
-        <View style={styles.lettersRow}>
-          {LETTERS.map((char, i) => (
-            <AnimatedLetter
-              key={char}
-              char={char}
-              index={i}
-              totalLetters={LETTERS.length}
-            />
-          ))}
-        </View>
-
-        {/* Tagline */}
-        <Animated.View style={[styles.taglineWrap, { opacity: subTextOpacity }]}>
-          <View style={styles.taglineBorder}>
-            <Text style={styles.taglineText}>✦  ELEVATE YOUR VISION  ✦</Text>
-          </View>
-        </Animated.View>
-
-        {/* Progress bar */}
-        <View style={styles.progressTrack}>
-          <Animated.View
-            style={[
-              styles.progressFill,
-              {
-                width: progressW.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '65%'],
-                }),
-              },
-            ]}
+      {/* ════════════════════════════════════════════
+          PHASE 1 — FLICKS letter burst
+      ═════════════════════════════════════════════ */}
+      <View style={styles.lettersContainer} pointerEvents="none">
+        {LETTERS.map((char, i) => (
+          <LogoLetter
+            key={char}
+            char={char}
+            index={i}
+            totalLetters={LETTERS.length}
           />
-          <LinearGradient
-            colors={[COLORS.accent, '#0066FF', 'rgba(0,255,178,0.3)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
+        ))}
       </View>
 
-      {/* Bottom HUD */}
-      <Animated.View style={[styles.bottomHud, { opacity: versionOpacity }]}>
-        <Text style={styles.versionText}>STREAM_PROTOCOL_V4.0</Text>
-        <View style={styles.versionLine} />
+      {/* ════════════════════════════════════════════
+          PHASE 2 — Netflix-style bold F brandmark
+      ═════════════════════════════════════════════ */}
+      <Animated.View
+        style={[
+          styles.brandmarkWrap,
+          {
+            transform: [{ scale: brandScale }],
+            opacity: brandOpacity,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        {/* Outer glow ring */}
+        <Animated.View
+          style={[
+            styles.brandGlowRing,
+            { opacity: brandGlow },
+          ]}
+        />
+
+        {/* The Netflix-style tall "F" pillar block */}
+        <View style={styles.brandBlock}>
+          {/* Full-height red pillar */}
+          <LinearGradient
+            colors={[C.redDeep, C.red, '#FF1A25']}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.brandPillar}
+          />
+          {/* F crossbar top */}
+          <View style={[styles.brandCrossbar, styles.brandCrossbarTop]} />
+          {/* F crossbar mid */}
+          <View style={[styles.brandCrossbar, styles.brandCrossbarMid]} />
+          {/* Subtle shine line */}
+          <View style={styles.brandShine} />
+        </View>
+
+        {/* FLICKS wordmark below the icon */}
+        <Text style={styles.wordmark} allowFontScaling={false}>
+          FLICKS
+        </Text>
       </Animated.View>
-    </View>
+
+      {/* ── Tagline ── */}
+      <Animated.View
+        style={[
+          styles.taglineWrap,
+          {
+            opacity: taglineOpacity,
+            transform: [{ translateY: taglineY }],
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Text style={styles.tagline} allowFontScaling={false}>
+          WATCH ANYWHERE. ANYTIME.
+        </Text>
+      </Animated.View>
+
+      {/* ════════════════════════════════════════════
+          Bottom loader — thin Netflix-style bar
+      ═════════════════════════════════════════════ */}
+      <View style={styles.loaderTrack} pointerEvents="none">
+        <Animated.View
+          style={[
+            styles.loaderFill,
+            {
+              width: progressAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0%', '100%'],
+              }),
+            },
+          ]}
+        >
+          {/* Bright leading edge shimmer */}
+          <View style={styles.loaderShimmer} />
+        </Animated.View>
+      </View>
+    </Animated.View>
   );
 }
 
+// ─── Styles ─────────────────────────────────────────────────────────────────────
+const BRAND_PILLAR_W  = scale(80);
+const BRAND_PILLAR_H  = scale(170);
+const CROSSBAR_H      = scale(26);
+const CROSSBAR_W_TOP  = scale(130);
+const CROSSBAR_W_MID  = scale(100);
+const CROSSBAR_TOP_Y  = scale(28);
+const CROSSBAR_MID_Y  = scale(88);
+
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#010C09',
+    backgroundColor: C.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glowSpot: {
+
+  // ── Background effects ──────────────────────────────────────────────────────
+  vignette: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  centerBloom: {
     position: 'absolute',
-    width: SW * 1.2,
-    height: SH * 0.5,
-    top: '25%',
-    left: '-10%',
+    width: SW * 1.1,
+    height: SH * 0.55,
+    top: '22%',
+    left: SW * -0.05,
     borderRadius: SW,
-    backgroundColor: 'rgba(0,255,178,0.03)',
+    backgroundColor: C.red,
   },
-  scanLine: {
+
+  // ── Phase 1 – Letters ───────────────────────────────────────────────────────
+  lettersContainer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: 'rgba(0,255,178,0.04)',
-    zIndex: 1,
-  },
-  particle: {
-    position: 'absolute',
-    borderRadius: 99,
-    backgroundColor: COLORS.accent,
-  },
-  topHud: {
-    position: 'absolute',
-    top: 60,
-    left: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  hudLine: {
-    height: 1,
-    backgroundColor: COLORS.accent,
-    opacity: 0.6,
-  },
-  hudText: {
-    color: COLORS.accentDim,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2.5,
-    opacity: 0.8,
-  },
-  centerBlock: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  speedLines: {
-    position: 'absolute',
-    left: -SW * 0.35,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  speedLine: {
-    height: 2,
-    backgroundColor: COLORS.accent,
-    borderRadius: 1,
-    marginBottom: 4,
-  },
-  lettersRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    paddingHorizontal: 4,
+    width: SW,
   },
   letterWrap: {
-    position: 'relative',
-    marginHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: scale(1),
   },
   letterGlow: {
     position: 'absolute',
-    width: 70,
-    height: 110,
-    borderRadius: 20,
-    opacity: 0.3,
+    borderRadius: scale(20),
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 30,
-    elevation: 20,
+    shadowOpacity: 1,
+    shadowRadius: scale(40),
+    elevation: 30,
   },
-  letter: {
-    fontSize: SW < 380 ? 72 : 86,
+  letterText: {
     fontWeight: '900',
-    letterSpacing: -2,
+    letterSpacing: scale(-3),
     includeFontPadding: false,
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
-    // 3D illusion via multiple shadows
-    textDecorationLine: 'none',
   },
-  taglineWrap: {
-    marginTop: 28,
+
+  // ── Phase 2 – Brand mark ────────────────────────────────────────────────────
+  brandmarkWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  taglineBorder: {
-    borderWidth: 1,
-    borderColor: 'rgba(0,255,178,0.25)',
-    borderRadius: 30,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,255,178,0.05)',
+  brandGlowRing: {
+    position: 'absolute',
+    width: BRAND_PILLAR_W * 3.2,
+    height: BRAND_PILLAR_H * 1.6,
+    borderRadius: BRAND_PILLAR_W * 2,
+    backgroundColor: C.redGlow,
+    shadowColor: C.red,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: scale(60),
+    elevation: 40,
   },
-  taglineText: {
-    color: COLORS.textSub,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 3,
+  brandBlock: {
+    width: CROSSBAR_W_TOP,
+    height: BRAND_PILLAR_H,
+    position: 'relative',
+    overflow: 'visible',
+  },
+
+  // Red vertical pillar (the spine of the "F")
+  brandPillar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: BRAND_PILLAR_W,
+    height: BRAND_PILLAR_H,
+    borderRadius: scale(4),
+    shadowColor: C.red,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: scale(20),
+    elevation: 20,
+  },
+
+  // F crossbars (also red rectangles extending right)
+  brandCrossbar: {
+    position: 'absolute',
+    left: 0,
+    height: CROSSBAR_H,
+    borderRadius: scale(3),
+    backgroundColor: C.red,
+    shadowColor: C.red,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: scale(8),
+  },
+  brandCrossbarTop: {
+    top: CROSSBAR_TOP_Y,
+    width: CROSSBAR_W_TOP,
+  },
+  brandCrossbarMid: {
+    top: CROSSBAR_MID_Y,
+    width: CROSSBAR_W_MID,
+  },
+
+  // Subtle white shine line on the pillar edge
+  brandShine: {
+    position: 'absolute',
+    left: scale(3),
+    top: scale(6),
+    width: scale(4),
+    height: BRAND_PILLAR_H - scale(12),
+    borderRadius: scale(2),
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+
+  // FLICKS wordmark below the icon
+  wordmark: {
+    marginTop: scale(20),
+    color: C.white,
+    fontSize: scale(22),
+    fontWeight: '700',
+    letterSpacing: scale(12),
     textTransform: 'uppercase',
+    opacity: 0.9,
   },
-  progressTrack: {
-    marginTop: 36,
-    width: SW * 0.55,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 3,
+
+  // ── Tagline ─────────────────────────────────────────────────────────────────
+  taglineWrap: {
+    position: 'absolute',
+    bottom: vscale(160),
+    alignItems: 'center',
+  },
+  tagline: {
+    color: C.silver,
+    fontSize: scale(11),
+    fontWeight: '600',
+    letterSpacing: scale(3.5),
+    textTransform: 'uppercase',
+    opacity: 0.75,
+  },
+
+  // ── Bottom loader ────────────────────────────────────────────────────────────
+  loaderTrack: {
+    position: 'absolute',
+    bottom: vscale(72),
+    left: SW * 0.1,
+    right: SW * 0.1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
   },
-  progressFill: {
+  loaderFill: {
     height: '100%',
-    borderRadius: 3,
+    backgroundColor: C.red,
+    borderRadius: 1,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  bottomHud: {
+  loaderShimmer: {
     position: 'absolute',
-    bottom: 52,
-    right: 28,
-    alignItems: 'flex-end',
-  },
-  versionText: {
-    color: COLORS.accentDim,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 2,
-    opacity: 0.6,
-    marginBottom: 4,
-  },
-  versionLine: {
-    width: 60,
-    height: 1,
-    backgroundColor: COLORS.accentDim,
-    opacity: 0.4,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: scale(24),
+    backgroundColor: 'rgba(255,200,200,0.6)',
+    borderRadius: 1,
   },
 });
