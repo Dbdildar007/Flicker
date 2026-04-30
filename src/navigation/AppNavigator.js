@@ -53,15 +53,13 @@ const TAB_CONFIG = {
 const GLASS_WHITE_BG = 'rgba(255,255,255,0.92)';
 const GLASS_WHITE_BORDER = 'rgba(255,255,255,0.75)';
 const GLASS_SHADOW = 'rgba(120,140,180,0.22)';
-const PILL_ACTIVE_BG = ['rgba(255,255,255,1)', 'rgba(240,245,255,0.98)'];
+const PILL_ACTIVE_BG = ['rgba(208, 246, 247, 0.3)', 'rgba(240,245,255,0.1)'];
 const PILL_ACTIVE_BORDER = 'rgba(210,220,240,0.9)';
 const ACTIVE_TINT = '#3A7BFF'; // Telegram blue
-const INACTIVE_TINT = 'rgba(100,110,140,0.7)';
-const BAR_BLUR_BG = ['rgba(255,255,255,0.88)', 'rgba(245,248,255,0.95)'];
 const INDICATOR_COLOR = '#3A7BFF';
+const INACTIVE_TINT = 'rgba(255,255,255,0.5)';
+const BAR_BLUR_BG = ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.25)'];  // 25% transparent
 
-// ── Sliding Background Indicator ─────────────────────────────────────────────
-// Follows the active tab like Telegram's sliding pill
 function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
   const slideAnim = useRef(new Animated.Value(activeIndex * tabWidth)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -70,9 +68,9 @@ function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
     Animated.parallel([
       Animated.spring(slideAnim, {
         toValue: activeIndex * tabWidth,
-        duration: 200,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        bounciness: 0, // 👈 Remove the bounce for speed
+        speed: 20,
       }),
       Animated.sequence([
         Animated.timing(scaleAnim, {
@@ -82,10 +80,10 @@ function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
           easing: Easing.out(Easing.quad),
         }),
         Animated.spring(scaleAnim, {
-        toValue: 1,
-        duration: 160,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.5)),
+          toValue: 1,
+          duration: 160,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5)),
         }),
       ]),
     ]).start();
@@ -130,87 +128,86 @@ function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
 
 // ── Single Tab Item ───────────────────────────────────────────────────────────
 function TabItem({ icon, label, focused, onPress, tabWidth }) {
-  const iconScaleAnim = useRef(new Animated.Value(1)).current;
-  const iconTranslateY = useRef(new Animated.Value(focused ? -1 : 0)).current;
-  const labelOpacity = useRef(new Animated.Value(focused ? 1 : 0.55)).current;
-  const labelScale = useRef(new Animated.Value(focused ? 1 : 0.88)).current;
-  const dotScale = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  const colorAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
-
+  const iconScaleAnim   = useRef(new Animated.Value(focused ? 1.22 : 1)).current;
+  const iconTranslateY  = useRef(new Animated.Value(focused ? -2 : 0)).current;
+  const labelOpacity    = useRef(new Animated.Value(focused ? 1 : 0.55)).current;
+  const labelScale      = useRef(new Animated.Value(focused ? 1.1 : 1)).current;
+  const dotScale        = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const colorAnim       = useRef(new Animated.Value(focused ? 1 : 0)).current;
+ 
   useEffect(() => {
-  // Native thread — instant on Android
-  Animated.parallel([
-    Animated.timing(iconScaleAnim, {
-      toValue: focused ? 1.15 : 1,
-      duration: 180,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.quad),
-    }),
-    Animated.timing(iconTranslateY, {
-      toValue: focused ? -2 : 0,
-      duration: 180,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.quad),
-    }),
-    Animated.timing(labelOpacity, {
-      toValue: focused ? 1 : 0.55,
-      duration: 160,
+    // Native thread
+    Animated.parallel([
+      Animated.timing(iconScaleAnim, {
+        toValue: focused ? 1.22 : 1,     // bigger icon when active
+        duration: 180,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(iconTranslateY, {
+        toValue: focused ? -2 : 0,
+        duration: 180,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(labelOpacity, {
+        toValue: focused ? 1 : 0.55,
+        duration: 160,
+        useNativeDriver: true,
+        easing: Easing.linear,
+      }),
+      Animated.timing(labelScale, {
+        toValue: focused ? 1.1 : 1,      // bigger label when active
+        duration: 180,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(dotScale, {
+        toValue: focused ? 1 : 0,
+        duration: 160,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+    ]).start();
+ 
+    // JS thread — color only
+    Animated.timing(colorAnim, {
+      toValue: focused ? 1 : 0,
+      duration: 120,
       useNativeDriver: true,
       easing: Easing.linear,
-    }),
-    Animated.timing(labelScale, {
-      toValue: focused ? 1 : 0.88,
-      duration: 180,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.quad),
-    }),
-    Animated.timing(dotScale, {
-      toValue: focused ? 1 : 0,
-      duration: 160,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.quad),
-    }),
-  ]).start();
-
-  // JS thread — kept minimal
-  Animated.timing(colorAnim, {
-    toValue: focused ? 1 : 0,
-    duration: 120,                // ✅ down from 200ms
-    useNativeDriver: false,
-    easing: Easing.linear,        // ✅ cheapest easing
-  }).start();
-}, [focused]);
-
-
-
+    }).start();
+  }, [focused]);
+ 
   const iconColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [INACTIVE_TINT, ACTIVE_TINT],
+    outputRange: [INACTIVE_TINT, ACTIVE_TINT],   // → #00FFB2
   });
-
+ 
   const labelColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [INACTIVE_TINT, ACTIVE_TINT],
+    outputRange: [INACTIVE_TINT, ACTIVE_TINT],   // → #00FFB2
   });
-
+ 
   return (
-    <TouchableOpacity
+<TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
       style={[styles.tabItem, { width: tabWidth }]}
-    >
-      {/* Icon */}
-      <Animated.View
+>
+<Animated.View
         style={{
-          transform: [{ scale: iconScaleAnim }, { translateY: iconTranslateY }],
+          transform: [
+            { scale: iconScaleAnim },
+            { translateY: iconTranslateY },
+          ],
         }}
-      >
-        <Animated.Text style={[styles.tabIcon, { color: iconColor }]}>
+>
+<Animated.Text style={[styles.tabIcon, { color: iconColor }]}>
           {icon}
-        </Animated.Text>
-      </Animated.View>
-
-      {/* Label */}
+</Animated.Text>
+</Animated.View>
+ 
       <Animated.Text
         style={[
           styles.tabLabel,
@@ -221,11 +218,10 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
           },
         ]}
         numberOfLines={1}
-      >
+>
         {label}
-      </Animated.Text>
-
-      {/* Active dot */}
+</Animated.Text>
+ 
       <Animated.View
         style={[
           styles.activeDot,
@@ -235,7 +231,7 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
           },
         ]}
       />
-    </TouchableOpacity>
+</TouchableOpacity>
   );
 }
 
@@ -447,6 +443,8 @@ function HomeStack() {
       screenOptions={{
         ...sharedScreenOpts,
         animation: 'fade_from_bottom',
+        headerShown: false,
+        freezeOnBlur: true,
       }}
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />
@@ -519,7 +517,8 @@ function MainTabs() {
         screenOptions={{
           headerShown: false,
           // Telegram-style instant crossfade between tabs
-          lazy: false,
+          lazy: true,
+          detachPreviousScreen: true
         }}
       >
         <Tab.Screen name="HomeTab" component={HomeStack} />
@@ -529,7 +528,7 @@ function MainTabs() {
       </Tab.Navigator>
 
       {/* FAB sits above the tab bar */}
-      <FloatingButton onPress={() => {}} />
+      <FloatingButton onPress={() => { }} />
     </View>
   );
 }
@@ -579,16 +578,12 @@ const styles = StyleSheet.create({
     shadowRadius: scale(24),
     elevation: 24,
   },
-  barOuter: {
-    borderRadius: scale(24),
+ barOuter: {
+    borderRadius: scale(40),          // high value = fully rounded ends
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: GLASS_WHITE_BORDER,
-    // Second layer shadow for depth
-    shadowColor: 'rgba(80,120,200,0.15)',
-    shadowOffset: { width: 0, height: scale(2) },
-    shadowOpacity: 1,
-    shadowRadius: scale(8),
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.25)',  // 25% transparent base
   },
 
   // ── Tab Row ─────────────────────────────────────────────────────────────────
@@ -599,18 +594,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(4),
     position: 'relative',
   },
-
-  // ── Sliding Pill ─────────────────────────────────────────────────────────────
-  slidingPill: {
+    slidingPill: {
     position: 'absolute',
-    borderRadius: scale(18),
+    borderRadius: scale(62),          // ✅ rounded pill
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: PILL_ACTIVE_BORDER,
-    // Deep 3-D glass shadow
-    shadowColor: 'rgba(58,123,255,0.25)',
+    borderColor: 'rgba(172, 178, 176, 0.45)',
+    shadowColor: '#d7f4eeff',
     shadowOffset: { width: 0, height: scale(4) },
-    shadowOpacity: 1,
+    shadowOpacity: 0.4,
     shadowRadius: scale(12),
     elevation: 12,
   },
@@ -631,21 +623,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: scale(6),
     zIndex: 2, // sit above sliding pill
+
   },
   tabIcon: {
-    fontSize: scale(19),
-    lineHeight: scale(24),
+    fontSize: scale(22),              // up from 19
+    lineHeight: scale(28),
     includeFontPadding: false,
     textAlign: 'center',
   },
-  tabLabel: {
-    fontSize: scale(10),
+    tabLabel: {
+    fontSize: scale(11),              // up from 10
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     letterSpacing: 0.2,
     marginTop: scale(2),
     includeFontPadding: false,
     textAlign: 'center',
   },
+ 
   activeDot: {
     position: 'absolute',
     bottom: scale(4),
