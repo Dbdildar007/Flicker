@@ -28,69 +28,75 @@ import {
 } from '../screens/AllScreens';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Tab   = createBottomTabNavigator();
 
-// ── Responsive helpers ────────────────────────────────────────────────────────
-const { width: SW, height: SH } = Dimensions.get('window');
-const isSmall = SW < 360;
-const isMedium = SW >= 360 && SW < 414;
+// ── Responsive helpers ─────────────────────────────────────────────────────────
+const getDimensions = () => Dimensions.get('window');
 
 const scale = (size) => {
-  if (isSmall) return size * 0.88;
-  if (isMedium) return size * 0.94;
+  const { width } = getDimensions();
+  if (width < 360)  return Math.round(size * 0.86);
+  if (width < 414)  return Math.round(size * 0.93);
+  if (width > 600)  return Math.round(size * 1.08); // tablets
   return size;
 };
 
-// ── Tab Configuration ─────────────────────────────────────────────────────────
+// ── Tab Configuration ──────────────────────────────────────────────────────────
 const TAB_CONFIG = {
-  HomeTab: { icon: '⊞', label: 'Home' },
-  MoviesTab: { icon: '🎬', label: 'Movies' },
+  HomeTab:    { icon: '⊞', label: 'Home'    },
+  MoviesTab:  { icon: '🎬', label: 'Movies'  },
   FriendsTab: { icon: '👥', label: 'Friends' },
   ProfileTab: { icon: '👤', label: 'Profile' },
 };
 
-// ── Glass constants ───────────────────────────────────────────────────────────
-const GLASS_WHITE_BG = 'rgba(255,255,255,0.92)';
-const GLASS_WHITE_BORDER = 'rgba(255,255,255,0.75)';
-const GLASS_SHADOW = 'rgba(120,140,180,0.22)';
-const PILL_ACTIVE_BG = ['rgba(208, 246, 247, 0.3)', 'rgba(240,245,255,0.1)'];
-const PILL_ACTIVE_BORDER = 'rgba(210,220,240,0.9)';
-const ACTIVE_TINT = '#3A7BFF'; // Telegram blue
-const INDICATOR_COLOR = '#3A7BFF';
-const INACTIVE_TINT = 'rgba(255,255,255,0.5)';
-const BAR_BLUR_BG = ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.25)'];  // 25% transparent
+// ── Design tokens ──────────────────────────────────────────────────────────────
+const ACTIVE_COLOR   = '#00FFB2';
+const INACTIVE_COLOR = 'rgba(255,255,255,0.42)';
 
-function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
+// Bar: 24% transparent white glass
+const BAR_BG_COLORS  = ['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.20)'];
+const BAR_BORDER     = 'rgba(255,255,255,0.28)';
+const BAR_TOP_SHINE  = ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.0)'];
+
+// Active pill: #00FFB2 tinted glass
+const PILL_BG_COLORS = ['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.10)'];
+const PILL_SHINE     = ['rgba(255,255,255,0.50)', 'rgba(255,255,255,0.0)'];
+const PILL_BORDER    = 'rgba(0,255,178,0.38)';
+const PILL_SHADOW    = '#00FFB2';
+
+// ── Sliding pill indicator (Telegram-style) ───────────────────────────────────
+function SlidingIndicator({ activeIndex, tabWidth }) {
   const slideAnim = useRef(new Animated.Value(activeIndex * tabWidth)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideAnim, {
-        toValue: activeIndex * tabWidth,
+    // Fast spring slide — like Telegram
+    Animated.spring(slideAnim, {
+      toValue: activeIndex * tabWidth,
+      useNativeDriver: true,
+      bounciness: 4,
+      speed: 26,
+    }).start();
+
+    // Subtle squish feedback
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.94,
+        duration: 55,
         useNativeDriver: true,
-        bounciness: 0, // 👈 Remove the bounce for speed
-        speed: 20,
+        easing: Easing.out(Easing.quad),
       }),
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.95,
-          duration: 60,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.quad),
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          duration: 160,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.back(1.5)),
-        }),
-      ]),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.8)),
+      }),
     ]).start();
   }, [activeIndex]);
 
-  const pillW = tabWidth - scale(12);
-  const pillH = scale(52);
+  const pillW = tabWidth - scale(10);
+  const pillH = scale(54);
 
   return (
     <Animated.View
@@ -100,171 +106,176 @@ function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
         {
           width: pillW,
           height: pillH,
-          left: scale(6),
+          left: scale(5),
           top: '50%',
           marginTop: -(pillH / 2),
           transform: [{ translateX: slideAnim }, { scale: scaleAnim }],
         },
       ]}
     >
+      {/* Main tinted fill */}
       <LinearGradient
-        colors={PILL_ACTIVE_BG}
+        colors={PILL_BG_COLORS}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { borderRadius: scale(30) }]}
       />
-      {/* Top highlight — 3D glass shine */}
+      {/* Top shine — 3D raised glass */}
       <LinearGradient
-        colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.0)']}
+        colors={PILL_SHINE}
         start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.5 }}
-        style={[StyleSheet.absoluteFill, { borderRadius: scale(16) }]}
+        end={{ x: 0, y: 0.52 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: scale(30) }]}
       />
-      {/* Bottom inner shadow */}
-      <View style={styles.pillInnerShadow} />
+      {/* Bottom depth shadow */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.10)']}
+        start={{ x: 0, y: 0.6 }}
+        end={{ x: 0, y: 1 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: scale(30) }]}
+      />
     </Animated.View>
   );
 }
 
-// ── Single Tab Item ───────────────────────────────────────────────────────────
+// ── Single Tab Item ────────────────────────────────────────────────────────────
 function TabItem({ icon, label, focused, onPress, tabWidth }) {
-  const iconScaleAnim   = useRef(new Animated.Value(focused ? 1.22 : 1)).current;
-  const iconTranslateY  = useRef(new Animated.Value(focused ? -2 : 0)).current;
-  const labelOpacity    = useRef(new Animated.Value(focused ? 1 : 0.55)).current;
-  const labelScale      = useRef(new Animated.Value(focused ? 1.1 : 1)).current;
-  const dotScale        = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  const colorAnim       = useRef(new Animated.Value(focused ? 1 : 0)).current;
- 
+  // Native-driver animations (transform + opacity)
+  const iconScale  = useRef(new Animated.Value(focused ? 1.20 : 1)).current;
+  const iconShiftY = useRef(new Animated.Value(focused ? -1.5 : 0)).current;
+  const labelScale = useRef(new Animated.Value(focused ? 1.08 : 1)).current;
+  const labelOpac  = useRef(new Animated.Value(focused ? 1 : 0.5)).current;
+  const dotScale   = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  // JS-driver animation — color interpolation ONLY (cannot use native driver)
+  const colorAnim  = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
   useEffect(() => {
-    // Native thread
+    // ── Native thread (fast, never blocks) ────────────────────────────────────
     Animated.parallel([
-      Animated.timing(iconScaleAnim, {
-        toValue: focused ? 1.22 : 1,     // bigger icon when active
-        duration: 180,
+      Animated.timing(iconScale, {
+        toValue: focused ? 1.20 : 1,
+        duration: 170,
         useNativeDriver: true,
         easing: Easing.out(Easing.quad),
       }),
-      Animated.timing(iconTranslateY, {
-        toValue: focused ? -2 : 0,
-        duration: 180,
+      Animated.timing(iconShiftY, {
+        toValue: focused ? -1.5 : 0,
+        duration: 170,
         useNativeDriver: true,
         easing: Easing.out(Easing.quad),
       }),
-      Animated.timing(labelOpacity, {
-        toValue: focused ? 1 : 0.55,
-        duration: 160,
+      Animated.timing(labelScale, {
+        toValue: focused ? 1.08 : 1,
+        duration: 170,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(labelOpac, {
+        toValue: focused ? 1 : 0.5,
+        duration: 150,
         useNativeDriver: true,
         easing: Easing.linear,
       }),
-      Animated.timing(labelScale, {
-        toValue: focused ? 1.1 : 1,      // bigger label when active
-        duration: 180,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }),
       Animated.timing(dotScale, {
         toValue: focused ? 1 : 0,
-        duration: 160,
+        duration: 150,
         useNativeDriver: true,
         easing: Easing.out(Easing.quad),
       }),
     ]).start();
- 
-    // JS thread — color only
+
+    // ── JS thread — color ONLY (separate call, never mixed with native) ───────
     Animated.timing(colorAnim, {
       toValue: focused ? 1 : 0,
-      duration: 120,
-      useNativeDriver: true,
+      duration: 150,
+      useNativeDriver: false,  // MUST stay false — color props not supported natively
       easing: Easing.linear,
     }).start();
   }, [focused]);
- 
-  const iconColor = colorAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [INACTIVE_TINT, ACTIVE_TINT],   // → #00FFB2
+
+  const tintColor = colorAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [INACTIVE_COLOR, ACTIVE_COLOR],
   });
- 
-  const labelColor = colorAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [INACTIVE_TINT, ACTIVE_TINT],   // → #00FFB2
-  });
- 
+
   return (
-<TouchableOpacity
+    <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
       style={[styles.tabItem, { width: tabWidth }]}
->
-<Animated.View
+    >
+      {/* Icon */}
+      <Animated.View
         style={{
           transform: [
-            { scale: iconScaleAnim },
-            { translateY: iconTranslateY },
+            { scale: iconScale },
+            { translateY: iconShiftY },
           ],
         }}
->
-<Animated.Text style={[styles.tabIcon, { color: iconColor }]}>
+      >
+        <Animated.Text style={[styles.tabIcon, { color: tintColor }]}>
           {icon}
-</Animated.Text>
-</Animated.View>
- 
+        </Animated.Text>
+      </Animated.View>
+
+      {/* Label */}
       <Animated.Text
+        numberOfLines={1}
         style={[
           styles.tabLabel,
           {
-            color: labelColor,
-            opacity: labelOpacity,
+            color: tintColor,
+            opacity: labelOpac,
             transform: [{ scale: labelScale }],
           },
         ]}
-        numberOfLines={1}
->
+      >
         {label}
-</Animated.Text>
- 
+      </Animated.Text>
+
+      {/* Active dot */}
       <Animated.View
         style={[
           styles.activeDot,
-          {
-            transform: [{ scale: dotScale }],
-            opacity: dotScale,
-          },
+          { transform: [{ scale: dotScale }], opacity: dotScale },
         ]}
       />
-</TouchableOpacity>
+    </TouchableOpacity>
   );
 }
 
-// ── Custom Tab Bar ────────────────────────────────────────────────────────────
+// ── Custom Tab Bar ─────────────────────────────────────────────────────────────
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
-  const tabBarWidth = SW - scale(24); // horizontal margin each side
-  const tabWidth = tabBarWidth / state.routes.length;
+  const { width: currentWidth } = getDimensions();
+  const tabBarWidth = currentWidth - scale(20) * 2;
+  const tabWidth    = tabBarWidth / state.routes.length;
 
   // Entrance animation
-  const barTranslateY = useRef(new Animated.Value(100)).current;
-  const barOpacity = useRef(new Animated.Value(0)).current;
+  const barY    = useRef(new Animated.Value(80)).current;
+  const barOpac = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(barTranslateY, {
+      Animated.spring(barY, {
         toValue: 0,
         useNativeDriver: true,
-        tension: 160,
-        friction: 20,
-        delay: 120,
+        bounciness: 6,
+        speed: 14,
+        delay: 100,
       }),
-      Animated.timing(barOpacity, {
+      Animated.timing(barOpac, {
         toValue: 1,
-        duration: 380,
+        duration: 300,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
-        delay: 120,
+        delay: 100,
       }),
     ]).start();
   }, []);
 
-  const handleTabPress = useCallback(
+  const handlePress = useCallback(
     (route, index) => {
       const isFocused = state.index === index;
       const event = navigation.emit({
@@ -279,49 +290,60 @@ function CustomTabBar({ state, descriptors, navigation }) {
     [state.index, navigation]
   );
 
-  const bottomPad = Math.max(insets.bottom, 8);
+  const bottomPad = Math.max(insets.bottom, 10);
 
   return (
     <Animated.View
       style={[
         styles.barWrapper,
         {
-          bottom: bottomPad + scale(8),
-          transform: [{ translateY: barTranslateY }],
-          opacity: barOpacity,
+          bottom: bottomPad + scale(6),
+          left: scale(20),
+          right: scale(20),
+          transform: [{ translateY: barY }],
+          opacity: barOpac,
         },
       ]}
     >
-      {/* Outer glass shell */}
       <View style={styles.barOuter}>
-        {/* Frosted glass BG */}
+        {/* Layer 1: 24% transparent glass base */}
         <LinearGradient
-          colors={BAR_BLUR_BG}
+          colors={BAR_BG_COLORS}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { borderRadius: scale(36) }]}
         />
 
-        {/* Top gloss highlight */}
+        {/* Layer 2: top-edge shine — 3D raised look */}
         <LinearGradient
-          colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']}
+          colors={BAR_TOP_SHINE}
           start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 0.4 }}
-          style={[
-            StyleSheet.absoluteFill,
-            { borderRadius: scale(24), overflow: 'hidden' },
-          ]}
+          end={{ x: 0, y: 0.38 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: scale(36) }]}
         />
 
-        {/* Inner tab row */}
-        <View style={[styles.tabRow, { height: scale(60) }]}>
-          {/* Sliding active pill — rendered behind tab items */}
+        {/* Layer 3: left-to-right bevel */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.0)']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: scale(36) }]}
+        />
+
+        {/* Layer 4: bottom inner shadow for depth */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.12)']}
+          start={{ x: 0, y: 0.65 }}
+          end={{ x: 0, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: scale(36) }]}
+        />
+
+        {/* Tab row */}
+        <View style={[styles.tabRow, { height: scale(62) }]}>
           <SlidingIndicator
-            tabCount={state.routes.length}
             activeIndex={state.index}
             tabWidth={tabWidth}
           />
-
           {state.routes.map((route, index) => {
             const cfg = TAB_CONFIG[route.name] || { icon: '•', label: route.name };
             return (
@@ -330,7 +352,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
                 icon={cfg.icon}
                 label={cfg.label}
                 focused={state.index === index}
-                onPress={() => handleTabPress(route, index)}
+                onPress={() => handlePress(route, index)}
                 tabWidth={tabWidth}
               />
             );
@@ -341,85 +363,75 @@ function CustomTabBar({ state, descriptors, navigation }) {
   );
 }
 
-// ── Floating Action Button ────────────────────────────────────────────────────
+// ── Floating Action Button ─────────────────────────────────────────────────────
 function FloatingButton({ onPress }) {
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const glowOpacity = useRef(new Animated.Value(0.5)).current;
-  const rotAnim = useRef(new Animated.Value(0)).current;
+  const pulse  = useRef(new Animated.Value(1)).current;
+  const glow   = useRef(new Animated.Value(0.45)).current;
+  const rotVal = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseScale, {
-          toValue: 1.08,
-          duration: 1400,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
-        Animated.timing(pulseScale, {
-          toValue: 1,
-          duration: 1400,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
+        Animated.timing(pulse, { toValue: 1.07, duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+        Animated.timing(pulse, { toValue: 1,    duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
       ])
     ).start();
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowOpacity, {
-          toValue: 0.85,
-          duration: 1400,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
-        Animated.timing(glowOpacity, {
-          toValue: 0.4,
-          duration: 1400,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
+        Animated.timing(glow, { toValue: 0.80, duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+        Animated.timing(glow, { toValue: 0.35, duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
       ])
     ).start();
 
     Animated.loop(
-      Animated.timing(rotAnim, {
-        toValue: 1,
-        duration: 10000,
-        useNativeDriver: true,
-        easing: Easing.linear,
-      })
+      Animated.timing(rotVal, { toValue: 1, duration: 10000, useNativeDriver: true, easing: Easing.linear })
     ).start();
   }, []);
 
-  const rotate = rotAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  const rotate = rotVal.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const FAB    = scale(46);
+  const FAB_R  = FAB / 2;
 
   return (
-    <View style={fabStyles.wrapper}>
-      {/* Outer glow ring */}
-      <Animated.View style={[fabStyles.glowRing, { opacity: glowOpacity }]} />
-
-      <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
-        <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+    <View style={[fabStyles.wrapper, { bottom: scale(92), right: scale(18) }]}>
+      <Animated.View
+        style={[
+          fabStyles.glowRing,
+          {
+            opacity: glow,
+            width: FAB + scale(18),
+            height: FAB + scale(18),
+            borderRadius: (FAB + scale(18)) / 2,
+          },
+        ]}
+      />
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <TouchableOpacity onPress={onPress} activeOpacity={0.82}>
           <LinearGradient
-            colors={['#5A9BFF', '#3A7BFF', '#2260E0']}
+            colors={['#00FFB2', '#00CC90', '#009A6E']}
             start={{ x: 0.2, y: 0 }}
             end={{ x: 0.8, y: 1 }}
-            style={fabStyles.btn}
+            style={[fabStyles.btn, { width: FAB, height: FAB, borderRadius: FAB_R }]}
           >
-            {/* Glass shine */}
             <LinearGradient
-              colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0.0)']}
+              colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0.0)']}
               start={{ x: 0.1, y: 0 }}
               end={{ x: 0.9, y: 0.55 }}
-              style={[StyleSheet.absoluteFill, { borderRadius: scale(28) }]}
+              style={[StyleSheet.absoluteFill, { borderRadius: FAB_R }]}
             />
-            {/* Rotating ring */}
-            <Animated.View style={[fabStyles.ring, { transform: [{ rotate }] }]} />
-            <Text style={fabStyles.icon}>✦</Text>
+            <Animated.View
+              style={[
+                fabStyles.ring,
+                {
+                  width: FAB - scale(8),
+                  height: FAB - scale(8),
+                  borderRadius: (FAB - scale(8)) / 2,
+                  transform: [{ rotate }],
+                },
+              ]}
+            />
+            <Text style={[fabStyles.icon, { fontSize: scale(18) }]}>✦</Text>
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
@@ -427,88 +439,40 @@ function FloatingButton({ onPress }) {
   );
 }
 
-// ── Shared Screen Options ─────────────────────────────────────────────────────
+// ── Shared screen options ──────────────────────────────────────────────────────
 const sharedScreenOpts = {
   headerShown: false,
   contentStyle: { backgroundColor: COLORS.bg },
-  // Smooth cross-fade for tab switches
   animation: 'fade',
-  animationDuration: 200,
+  animationDuration: 180,
 };
 
-// ── Stack Navigators ──────────────────────────────────────────────────────────
+// ── Stack navigators ───────────────────────────────────────────────────────────
 function HomeStack() {
   return (
     <Stack.Navigator
-      screenOptions={{
-        ...sharedScreenOpts,
-        animation: 'fade_from_bottom',
-        headerShown: false,
-        freezeOnBlur: true,
-      }}
+      screenOptions={{ ...sharedScreenOpts, animation: 'fade_from_bottom', freezeOnBlur: true }}
     >
-      <Stack.Screen name="HomeMain" component={HomeScreen} />
-      <Stack.Screen
-        name="MovieDetail"
-        component={MovieDetailScreen}
-        options={{
-          animation: 'ios_from_right',
-          animationDuration: 320,
-        }}
-      />
-      <Stack.Screen
-        name="GenreScreen"
-        component={GenreScreen}
-        options={{
-          animation: 'ios_from_right',
-          animationDuration: 320,
-        }}
-      />
-      <Stack.Screen
-        name="SearchScreen"
-        component={SearchScreen}
-        options={{
-          animation: 'fade',
-          animationDuration: 200,
-        }}
-      />
-      <Stack.Screen
-        name="ProfileScreen"
-        component={ProfileScreen}
-        options={{
-          animation: 'ios_from_right',
-          animationDuration: 320,
-        }}
-      />
+      <Stack.Screen name="HomeMain"      component={HomeScreen} />
+      <Stack.Screen name="MovieDetail"   component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="GenreScreen"   component={GenreScreen}       options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="SearchScreen"  component={SearchScreen}      options={{ animation: 'fade',           animationDuration: 180 }} />
+      <Stack.Screen name="ProfileScreen" component={ProfileScreen}     options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
 
 function MoviesStack() {
   return (
-    <Stack.Navigator screenOptions={sharedScreenOpts}>
-      <Stack.Screen name="MoviesMain" component={MoviesScreen} />
-      <Stack.Screen
-        name="MovieDetail"
-        component={MovieDetailScreen}
-        options={{
-          animation: 'ios_from_right',
-          animationDuration: 320,
-        }}
-      />
-      <Stack.Screen
-        name="GenreScreen"
-        component={GenreScreen}
-        options={{
-          animation: 'ios_from_right',
-          animationDuration: 320,
-        }}
-      />
+    <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
+      <Stack.Screen name="MoviesMain"  component={MoviesScreen} />
+      <Stack.Screen name="MovieDetail" component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="GenreScreen" component={GenreScreen}       options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
 
-// ── Main Tab Navigator ────────────────────────────────────────────────────────
+// ── Main tabs ──────────────────────────────────────────────────────────────────
 function MainTabs() {
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -516,36 +480,34 @@ function MainTabs() {
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
           headerShown: false,
-          // Telegram-style instant crossfade between tabs
-          lazy: true,
-          detachPreviousScreen: true
+          lazy: false,         // pre-mount all screens — instant tab switching
+          freezeOnBlur: false,
         }}
       >
-        <Tab.Screen name="HomeTab" component={HomeStack} />
-        <Tab.Screen name="MoviesTab" component={MoviesStack} />
+        <Tab.Screen name="HomeTab"    component={HomeStack}     />
+        <Tab.Screen name="MoviesTab"  component={MoviesStack}   />
         <Tab.Screen name="FriendsTab" component={FriendsScreen} />
         <Tab.Screen name="ProfileTab" component={ProfileScreen} />
       </Tab.Navigator>
 
-      {/* FAB sits above the tab bar */}
-      <FloatingButton onPress={() => { }} />
+      <FloatingButton onPress={() => {}} />
     </View>
   );
 }
 
-// ── Root Navigator ────────────────────────────────────────────────────────────
+// ── Root navigator ─────────────────────────────────────────────────────────────
 export default function AppNavigator() {
   return (
     <NavigationContainer
       theme={{
         dark: true,
         colors: {
-          primary: ACTIVE_TINT,
-          background: COLORS.bg,
-          card: COLORS.bg2 || '#fff',
-          text: COLORS.text || '#111',
-          border: COLORS.glassBorder || 'rgba(200,210,230,0.4)',
-          notification: COLORS.red || '#FF3B30',
+          primary:      ACTIVE_COLOR,
+          background:   COLORS.bg,
+          card:         COLORS.bg2    || '#0a0a0a',
+          text:         COLORS.text   || '#ffffff',
+          border:       COLORS.glassBorder || 'rgba(255,255,255,0.12)',
+          notification: COLORS.red    || '#FF3B30',
         },
       }}
     >
@@ -554,7 +516,7 @@ export default function AppNavigator() {
           headerShown: false,
           contentStyle: { backgroundColor: COLORS.bg },
           animation: 'fade',
-          animationDuration: 220,
+          animationDuration: 200,
         }}
       >
         <Stack.Screen name="Main" component={MainTabs} />
@@ -563,93 +525,82 @@ export default function AppNavigator() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // ── Bar ─────────────────────────────────────────────────────────────────────
+
   barWrapper: {
     position: 'absolute',
-    left: scale(12),
-    right: scale(12),
     zIndex: 999,
-    // Soft floating shadow
-    shadowColor: GLASS_SHADOW,
-    shadowOffset: { width: 0, height: scale(8) },
+    shadowColor: 'rgba(0,255,178,0.18)',
+    shadowOffset: { width: 0, height: scale(6) },
     shadowOpacity: 1,
-    shadowRadius: scale(24),
-    elevation: 24,
-  },
- barOuter: {
-    borderRadius: scale(40),          // high value = fully rounded ends
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.25)',  // 25% transparent base
+    shadowRadius: scale(20),
+    elevation: 22,
   },
 
-  // ── Tab Row ─────────────────────────────────────────────────────────────────
+  // Fully-rounded pill — transparent 24% glass
+  barOuter: {
+    borderRadius: scale(36),
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: BAR_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.18)', // Android fallback
+  },
+
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: scale(5),
     paddingVertical: scale(4),
-    paddingHorizontal: scale(4),
     position: 'relative',
   },
-    slidingPill: {
+
+  slidingPill: {
     position: 'absolute',
-    borderRadius: scale(62),          // ✅ rounded pill
+    borderRadius: scale(30),
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(172, 178, 176, 0.45)',
-    shadowColor: '#d7f4eeff',
-    shadowOffset: { width: 0, height: scale(4) },
-    shadowOpacity: 0.4,
-    shadowRadius: scale(12),
-    elevation: 12,
-  },
-  pillInnerShadow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: scale(10),
-    borderBottomLeftRadius: scale(18),
-    borderBottomRightRadius: scale(18),
-    backgroundColor: 'rgba(180,200,240,0.18)',
+    borderColor: PILL_BORDER,
+    shadowColor: PILL_SHADOW,
+    shadowOffset: { width: 0, height: scale(3) },
+    shadowOpacity: 0.35,
+    shadowRadius: scale(10),
+    elevation: 10,
   },
 
-  // ── Tab Item ─────────────────────────────────────────────────────────────────
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: scale(6),
-    zIndex: 2, // sit above sliding pill
-
+    paddingVertical: scale(5),
+    zIndex: 2,
   },
+
   tabIcon: {
-    fontSize: scale(22),              // up from 19
-    lineHeight: scale(28),
+    fontSize: scale(21),
+    lineHeight: scale(26),
     includeFontPadding: false,
     textAlign: 'center',
   },
-    tabLabel: {
-    fontSize: scale(11),              // up from 10
+
+  tabLabel: {
+    fontSize: scale(10),
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     marginTop: scale(2),
     includeFontPadding: false,
     textAlign: 'center',
   },
- 
+
   activeDot: {
     position: 'absolute',
-    bottom: scale(4),
-    width: scale(4),
-    height: scale(4),
+    bottom: scale(3),
+    width: scale(3.5),
+    height: scale(3.5),
     borderRadius: scale(2),
-    backgroundColor: INDICATOR_COLOR,
-    shadowColor: INDICATOR_COLOR,
+    backgroundColor: ACTIVE_COLOR,
+    shadowColor: ACTIVE_COLOR,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
+    shadowOpacity: 1,
     shadowRadius: scale(4),
   },
 });
@@ -657,54 +608,41 @@ const styles = StyleSheet.create({
 const fabStyles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    bottom: scale(80),
-    right: scale(20),
     zIndex: 998,
     alignItems: 'center',
     justifyContent: 'center',
   },
   glowRing: {
     position: 'absolute',
-    width: scale(64),
-    height: scale(64),
-    borderRadius: scale(32),
-    backgroundColor: 'rgba(58,123,255,0.22)',
-    shadowColor: '#3A7BFF',
+    backgroundColor: 'rgba(0,255,178,0.20)',
+    shadowColor: ACTIVE_COLOR,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: scale(16),
+    shadowOpacity: 0.5,
+    shadowRadius: scale(14),
   },
   btn: {
-    width: scale(52),
-    height: scale(52),
-    borderRadius: scale(26),
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    // Deep shadow
-    shadowColor: '#3A7BFF',
-    shadowOffset: { width: 0, height: scale(6) },
-    shadowOpacity: 0.55,
-    shadowRadius: scale(14),
-    elevation: 18,
+    borderColor: 'rgba(255,255,255,0.30)',
+    shadowColor: ACTIVE_COLOR,
+    shadowOffset: { width: 0, height: scale(5) },
+    shadowOpacity: 0.5,
+    shadowRadius: scale(12),
+    elevation: 16,
   },
   ring: {
     position: 'absolute',
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(22),
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderTopColor: 'rgba(255,255,255,0.65)',
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderTopColor: 'rgba(255,255,255,0.60)',
   },
   icon: {
-    color: '#FFFFFF',
-    fontSize: scale(22),
+    color: '#001a0f',
     fontWeight: '900',
-    textShadowColor: 'rgba(255,255,255,0.5)',
+    textShadowColor: 'rgba(255,255,255,0.4)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
+    textShadowRadius: 5,
   },
 });
