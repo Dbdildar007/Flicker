@@ -70,23 +70,22 @@ function SlidingIndicator({ tabCount, activeIndex, tabWidth }) {
     Animated.parallel([
       Animated.spring(slideAnim, {
         toValue: activeIndex * tabWidth,
+        duration: 200,
         useNativeDriver: true,
-        tension: 260,
-        friction: 22,
-        velocity: 3,
+        easing: Easing.out(Easing.quad),
       }),
       Animated.sequence([
         Animated.timing(scaleAnim, {
           toValue: 0.95,
-          duration: 80,
+          duration: 60,
           useNativeDriver: true,
           easing: Easing.out(Easing.quad),
         }),
         Animated.spring(scaleAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 300,
-          friction: 12,
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.5)),
         }),
       ]),
     ]).start();
@@ -139,44 +138,50 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
   const colorAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(iconScaleAnim, {
-        toValue: focused ? 1.15 : 1,
-        useNativeDriver: true,
-        tension: 320,
-        friction: 14,
-      }),
-      Animated.spring(iconTranslateY, {
-        toValue: focused ? -2 : 0,
-        useNativeDriver: true,
-        tension: 280,
-        friction: 18,
-      }),
-      Animated.timing(labelOpacity, {
-        toValue: focused ? 1 : 0.55,
-        duration: 220,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.spring(labelScale, {
-        toValue: focused ? 1 : 0.88,
-        useNativeDriver: true,
-        tension: 300,
-        friction: 15,
-      }),
-      Animated.spring(dotScale, {
-        toValue: focused ? 1 : 0,
-        useNativeDriver: true,
-        tension: 400,
-        friction: 10,
-      }),
-      Animated.timing(colorAnim, {
-        toValue: focused ? 1 : 0,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [focused]);
+  // Native thread — instant on Android
+  Animated.parallel([
+    Animated.timing(iconScaleAnim, {
+      toValue: focused ? 1.15 : 1,
+      duration: 180,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.quad),
+    }),
+    Animated.timing(iconTranslateY, {
+      toValue: focused ? -2 : 0,
+      duration: 180,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.quad),
+    }),
+    Animated.timing(labelOpacity, {
+      toValue: focused ? 1 : 0.55,
+      duration: 160,
+      useNativeDriver: true,
+      easing: Easing.linear,
+    }),
+    Animated.timing(labelScale, {
+      toValue: focused ? 1 : 0.88,
+      duration: 180,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.quad),
+    }),
+    Animated.timing(dotScale, {
+      toValue: focused ? 1 : 0,
+      duration: 160,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.quad),
+    }),
+  ]).start();
+
+  // JS thread — kept minimal
+  Animated.timing(colorAnim, {
+    toValue: focused ? 1 : 0,
+    duration: 120,                // ✅ down from 200ms
+    useNativeDriver: false,
+    easing: Easing.linear,        // ✅ cheapest easing
+  }).start();
+}, [focused]);
+
+
 
   const iconColor = colorAnim.interpolate({
     inputRange: [0, 1],
@@ -353,13 +358,13 @@ function FloatingButton({ onPress }) {
           toValue: 1.08,
           duration: 1400,
           useNativeDriver: true,
-          easing: Easing.inOut(Easing.sine),
+          easing: Easing.inOut(Easing.sin),
         }),
         Animated.timing(pulseScale, {
           toValue: 1,
           duration: 1400,
           useNativeDriver: true,
-          easing: Easing.inOut(Easing.sine),
+          easing: Easing.inOut(Easing.sin),
         }),
       ])
     ).start();
@@ -370,13 +375,13 @@ function FloatingButton({ onPress }) {
           toValue: 0.85,
           duration: 1400,
           useNativeDriver: true,
-          easing: Easing.inOut(Easing.sine),
+          easing: Easing.inOut(Easing.sin),
         }),
         Animated.timing(glowOpacity, {
           toValue: 0.4,
           duration: 1400,
           useNativeDriver: true,
-          easing: Easing.inOut(Easing.sine),
+          easing: Easing.inOut(Easing.sin),
         }),
       ])
     ).start();
@@ -514,7 +519,7 @@ function MainTabs() {
         screenOptions={{
           headerShown: false,
           // Telegram-style instant crossfade between tabs
-          lazy: true,
+          lazy: false,
         }}
       >
         <Tab.Screen name="HomeTab" component={HomeStack} />
