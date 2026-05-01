@@ -16,6 +16,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, RADIUS } from '../data/theme';
+import Icon from 'react-native-vector-icons/Feather';
 
 import HomeScreen from '../screens/HomeScreen';
 import {
@@ -28,41 +29,41 @@ import {
 } from '../screens/AllScreens';
 
 const Stack = createNativeStackNavigator();
-const Tab   = createBottomTabNavigator();
+const Tab = createBottomTabNavigator();
 
 // ── Responsive helpers ─────────────────────────────────────────────────────────
 const getDimensions = () => Dimensions.get('window');
 
 const scale = (size) => {
   const { width } = getDimensions();
-  if (width < 360)  return Math.round(size * 0.86);
-  if (width < 414)  return Math.round(size * 0.93);
-  if (width > 600)  return Math.round(size * 1.08); // tablets
+  if (width < 360) return Math.round(size * 0.86);
+  if (width < 414) return Math.round(size * 0.93);
+  if (width > 600) return Math.round(size * 1.08); // tablets
   return size;
 };
 
 // ── Tab Configuration ──────────────────────────────────────────────────────────
 const TAB_CONFIG = {
-  HomeTab:    { icon: '⊞', label: 'Home'    },
-  MoviesTab:  { icon: '🎬', label: 'Movies'  },
+  HomeTab: { icon: '⊞', label: 'Home' },
+  MoviesTab: { icon: '🎬', label: 'Movies' },
   FriendsTab: { icon: '👥', label: 'Friends' },
   ProfileTab: { icon: '👤', label: 'Profile' },
 };
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
-const ACTIVE_COLOR   = '#00FFB2';
-const INACTIVE_COLOR = 'rgba(255,255,255,0.42)';
+const ACTIVE_COLOR = '#0c0d0cff';
+const INACTIVE_COLOR = '#0c0d0cff';
 
 // Bar: 24% transparent white glass
-const BAR_BG_COLORS  = ['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.20)'];
-const BAR_BORDER     = 'rgba(255,255,255,0.28)';
-const BAR_TOP_SHINE  = ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.0)'];
+const BAR_BG_COLORS = ['rgba(247, 244, 244, 0.24)', 'rgba(255,255,255,0.20)'];
+const BAR_BORDER = 'rgba(255,255,255,0.28)';
+const BAR_TOP_SHINE = ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.0)'];
 
 // Active pill: #00FFB2 tinted glass
-const PILL_BG_COLORS = ['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.10)'];
-const PILL_SHINE     = ['rgba(255,255,255,0.50)', 'rgba(255,255,255,0.0)'];
-const PILL_BORDER    = 'rgba(0,255,178,0.38)';
-const PILL_SHADOW    = '#00FFB2';
+const PILL_BG_COLORS = ['rgba(239, 246, 244, 0.42)', 'rgba(247, 254, 252, 0.1)'];
+const PILL_SHINE = ['rgba(255,255,255,0.50)', 'rgba(255,255,255,0.0)'];
+const PILL_BORDER = 'rgba(240, 244, 243, 0.38)';
+const PILL_SHADOW = '#f5f6f9ff';
 
 // ── Sliding pill indicator (Telegram-style) ───────────────────────────────────
 function SlidingIndicator({ activeIndex, tabWidth }) {
@@ -138,36 +139,31 @@ function SlidingIndicator({ activeIndex, tabWidth }) {
   );
 }
 
-// ── Single Tab Item ────────────────────────────────────────────────────────────
+// ── Updated TabItem ────────────────────────────────────────────────────────────
 function TabItem({ icon, label, focused, onPress, tabWidth }) {
-  // Native-driver animations (transform + opacity)
-  const iconScale  = useRef(new Animated.Value(focused ? 1.20 : 1)).current;
+  // 1. Native Values (Transforms/Opacity) - useNativeDriver: true
+  const iconScale = useRef(new Animated.Value(focused ? 1.2 : 1)).current;
   const iconShiftY = useRef(new Animated.Value(focused ? -1.5 : 0)).current;
   const labelScale = useRef(new Animated.Value(focused ? 1.08 : 1)).current;
-  const labelOpac  = useRef(new Animated.Value(focused ? 1 : 0.5)).current;
-  const dotScale   = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const labelOpac = useRef(new Animated.Value(focused ? 1 : 0.5)).current;
+  const dotScale = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
-  // JS-driver animation — color interpolation ONLY (cannot use native driver)
-  const colorAnim  = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  // 2. JS Value (Color) - useNativeDriver: false
+  // We initialize this specifically to avoid the "native node" error
+  const colorAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
-    // ── Native thread (fast, never blocks) ────────────────────────────────────
+    // Standard Native Animations
     Animated.parallel([
       Animated.timing(iconScale, {
-        toValue: focused ? 1.20 : 1,
-        duration: 170,
+        toValue: focused ? 1.2 : 1,
+        duration: 180,
         useNativeDriver: true,
         easing: Easing.out(Easing.quad),
       }),
       Animated.timing(iconShiftY, {
         toValue: focused ? -1.5 : 0,
-        duration: 170,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }),
-      Animated.timing(labelScale, {
-        toValue: focused ? 1.08 : 1,
-        duration: 170,
+        duration: 180,
         useNativeDriver: true,
         easing: Easing.out(Easing.quad),
       }),
@@ -185,17 +181,20 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
       }),
     ]).start();
 
-    // ── JS thread — color ONLY (separate call, never mixed with native) ───────
+    // JS-Thread Animation for Color
+    // This MUST have useNativeDriver: false
     Animated.timing(colorAnim, {
       toValue: focused ? 1 : 0,
       duration: 150,
-      useNativeDriver: false,  // MUST stay false — color props not supported natively
+      useNativeDriver: true,
       easing: Easing.linear,
     }).start();
-  }, [focused]);
 
+  }, [focused]); // Dependency array ensures this runs when focus changes
+
+  // Interpolate the color based on the JS-driven value
   const tintColor = colorAnim.interpolate({
-    inputRange:  [0, 1],
+    inputRange: [0, 1],
     outputRange: [INACTIVE_COLOR, ACTIVE_COLOR],
   });
 
@@ -205,13 +204,9 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
       activeOpacity={0.75}
       style={[styles.tabItem, { width: tabWidth }]}
     >
-      {/* Icon */}
       <Animated.View
         style={{
-          transform: [
-            { scale: iconScale },
-            { translateY: iconShiftY },
-          ],
+          transform: [{ scale: iconScale }, { translateY: iconShiftY }],
         }}
       >
         <Animated.Text style={[styles.tabIcon, { color: tintColor }]}>
@@ -219,7 +214,6 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
         </Animated.Text>
       </Animated.View>
 
-      {/* Label */}
       <Animated.Text
         numberOfLines={1}
         style={[
@@ -234,28 +228,29 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
         {label}
       </Animated.Text>
 
-      {/* Active dot */}
       <Animated.View
         style={[
           styles.activeDot,
-          { transform: [{ scale: dotScale }], opacity: dotScale },
+          {
+            transform: [{ scale: dotScale }],
+            opacity: dotScale,
+            backgroundColor: ACTIVE_COLOR // Ensure dot is always the active color
+          }
         ]}
       />
     </TouchableOpacity>
   );
 }
-
 // ── Custom Tab Bar ─────────────────────────────────────────────────────────────
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
   const { width: currentWidth } = getDimensions();
   const tabBarWidth = currentWidth - scale(20) * 2;
-  const tabWidth    = tabBarWidth / state.routes.length;
+  const tabWidth = tabBarWidth / state.routes.length;
 
   // Entrance animation
-  const barY    = useRef(new Animated.Value(80)).current;
+  const barY = useRef(new Animated.Value(80)).current;
   const barOpac = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     Animated.parallel([
       Animated.spring(barY, {
@@ -297,7 +292,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
       style={[
         styles.barWrapper,
         {
-          bottom: bottomPad + scale(6),
+          bottom: bottomPad + scale(2),
           left: scale(20),
           right: scale(20),
           transform: [{ translateY: barY }],
@@ -311,7 +306,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
           colors={BAR_BG_COLORS}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: scale(36) }]}
+          style={[StyleSheet.absoluteFill, { borderRadius: scale(360) }]}
         />
 
         {/* Layer 2: top-edge shine — 3D raised look */}
@@ -365,15 +360,15 @@ function CustomTabBar({ state, descriptors, navigation }) {
 
 // ── Floating Action Button ─────────────────────────────────────────────────────
 function FloatingButton({ onPress }) {
-  const pulse  = useRef(new Animated.Value(1)).current;
-  const glow   = useRef(new Animated.Value(0.45)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  const glow = useRef(new Animated.Value(0.45)).current;
   const rotVal = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.07, duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
-        Animated.timing(pulse, { toValue: 1,    duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+        Animated.timing(pulse, { toValue: 1, duration: 1500, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
       ])
     ).start();
 
@@ -390,8 +385,8 @@ function FloatingButton({ onPress }) {
   }, []);
 
   const rotate = rotVal.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const FAB    = scale(46);
-  const FAB_R  = FAB / 2;
+  const FAB = scale(46);
+  const FAB_R = FAB / 2;
 
   return (
     <View style={[fabStyles.wrapper, { bottom: scale(92), right: scale(18) }]}>
@@ -453,11 +448,11 @@ function HomeStack() {
     <Stack.Navigator
       screenOptions={{ ...sharedScreenOpts, animation: 'fade_from_bottom', freezeOnBlur: true }}
     >
-      <Stack.Screen name="HomeMain"      component={HomeScreen} />
-      <Stack.Screen name="MovieDetail"   component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="GenreScreen"   component={GenreScreen}       options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="SearchScreen"  component={SearchScreen}      options={{ animation: 'fade',           animationDuration: 180 }} />
-      <Stack.Screen name="ProfileScreen" component={ProfileScreen}     options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="HomeMain" component={HomeScreen} />
+      <Stack.Screen name="MovieDetail" component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ animation: 'fade', animationDuration: 180 }} />
+      <Stack.Screen name="ProfileScreen" component={ProfileScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
@@ -465,9 +460,9 @@ function HomeStack() {
 function MoviesStack() {
   return (
     <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
-      <Stack.Screen name="MoviesMain"  component={MoviesScreen} />
+      <Stack.Screen name="MoviesMain" component={MoviesScreen} />
       <Stack.Screen name="MovieDetail" component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="GenreScreen" component={GenreScreen}       options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
@@ -484,13 +479,13 @@ function MainTabs() {
           freezeOnBlur: false,
         }}
       >
-        <Tab.Screen name="HomeTab"    component={HomeStack}     />
-        <Tab.Screen name="MoviesTab"  component={MoviesStack}   />
+        <Tab.Screen name="HomeTab" component={HomeStack} />
+        <Tab.Screen name="MoviesTab" component={MoviesStack} />
         <Tab.Screen name="FriendsTab" component={FriendsScreen} />
         <Tab.Screen name="ProfileTab" component={ProfileScreen} />
       </Tab.Navigator>
 
-      <FloatingButton onPress={() => {}} />
+      <FloatingButton onPress={() => { }} />
     </View>
   );
 }
@@ -502,12 +497,12 @@ export default function AppNavigator() {
       theme={{
         dark: true,
         colors: {
-          primary:      ACTIVE_COLOR,
-          background:   COLORS.bg,
-          card:         COLORS.bg2    || '#0a0a0a',
-          text:         COLORS.text   || '#ffffff',
-          border:       COLORS.glassBorder || 'rgba(255,255,255,0.12)',
-          notification: COLORS.red    || '#FF3B30',
+          primary: ACTIVE_COLOR,
+          background: COLORS.bg,
+          card: COLORS.bg2 || '#0a0a0a',
+          text: COLORS.text || '#ffffff',
+          border: COLORS.glassBorder || 'rgba(255,255,255,0.12)',
+          notification: COLORS.red || '#FF3B30',
         },
       }}
     >
@@ -549,9 +544,10 @@ const styles = StyleSheet.create({
 
   tabRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(5),
-    paddingVertical: scale(4),
+    alignItems: 'center', // Keep this to ensure icons stay aligned with each other
+    paddingHorizontal: scale(0),
+    paddingBottom: scale(0),
+    paddingTop: scale(0), // <--- Increase this value to "bring down" the tabs
     position: 'relative',
   },
 
