@@ -1,3 +1,78 @@
+function HomeSkeleton() {
+  return (
+    <View style={skelStyles.container}>
+      {/* Hero skeleton */}
+      <SkeletonBox width={SW} height={SW * 0.62} borderRadius={0} />
+      <View style={{ padding: 20, marginTop: 20 }}>
+        <SkeletonBox width={180} height={16} style={{ marginBottom: 16 }} />
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {[0, 1, 2, 3].map(i => (
+            <View key={i}>
+              <SkeletonBox width={140} height={200} borderRadius={RADIUS.lg} />
+              <SkeletonBox width={100} height={10} style={{ marginTop: 8 }} />
+            </View>
+          ))}
+        </View>
+        <SkeletonBox width={160} height={16} style={{ marginTop: 28, marginBottom: 16 }} />
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {[0, 1, 2, 3].map(i => (
+            <SkeletonBox key={i} width={140} height={200} borderRadius={RADIUS.lg} />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+  const [isConnected, setIsConnected] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+ useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Skeleton shows for at least 1s for polish
+    const t = setTimeout(() => loadData(), 800);
+    return () => clearTimeout(t);
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData(true);
+  };
+
+  // Not connected
+  if (!isConnected) {
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <NoInternet onRetry={() => loadData()} />
+      </View>
+    );
+  }
+
+  // Loading skeleton (1s minimum)
+  if (loadingInitial) {
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <HomeSkeleton />
+      </View>
+    );
+  }
+
+
+
+
+
+
+
+
 // src/screens/HomeScreen.js
 import React, {
   useRef, useEffect, useState, useCallback,
