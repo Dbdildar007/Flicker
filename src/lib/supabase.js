@@ -1,302 +1,192 @@
 // src/lib/supabase.js
-import 'react-native-url-polyfill/auto';
+// ─── Supabase client setup ────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── Replace with your actual Supabase credentials ──────────────────────────
-const SUPABASE_URL  = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY';
-// ──────────────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';   // ← replace
+const SUPABASE_KEY = 'YOUR_ANON_KEY';       // ← replace
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true },
+  // Tune realtime + fetch timeout
+  global: { fetch: (...args) => fetch(...args) },
 });
 
-// ── Movies / Series API ────────────────────────────────────────────────────
-export const moviesAPI = {
-
-  /** Fetch featured movies for hero carousel */
-  async getFeatured() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('is_featured', true)
-        .order('created_at', { ascending: false })
-        .limit(8);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getFeatured]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch trending movies/series */
-  async getTrending() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('is_trending', true)
-        .order('rating', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getTrending]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch editor's choice */
-  async getEditorChoice() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('is_editor_choice', true)
-        .order('rating', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getEditorChoice]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch newly added */
-  async getNewlyAdded() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .not('newly_added', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getNewlyAdded]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch by genre/category */
-  async getByGenre(genre) {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .contains('genre', [genre])
-        .order('rating', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getByGenre]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch only series */
-  async getSeries() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('is_series', true)
-        .order('rating', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getSeries]', err.message);
-      return [];
-    }
-  },
-
-  /** Fetch only movies (not series) */
-  async getMoviesOnly() {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('is_series', false)
-        .order('rating', { ascending: false })
-        .limit(30);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getMoviesOnly]', err.message);
-      return [];
-    }
-  },
-
-  /** Search movies/series by title */
-  async search(query) {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .ilike('title', `%${query}%`)
-        .limit(30);
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[search]', err.message);
-      return [];
-    }
-  },
-
-  /** Get single movie/series by id */
-  async getById(id) {
-    try {
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('[getById]', err.message);
-      return null;
-    }
-  },
-
-  /** Fetch all movies for home (combined) */
-  async getHomeData() {
-    try {
-      const [featured, trending, editorChoice, newlyAdded, series] = await Promise.all([
-        moviesAPI.getFeatured(),
-        moviesAPI.getTrending(),
-        moviesAPI.getEditorChoice(),
-        moviesAPI.getNewlyAdded(),
-        moviesAPI.getSeries(),
-      ]);
-      return { featured, trending, editorChoice, newlyAdded, series };
-    } catch (err) {
-      console.error('[getHomeData]', err.message);
-      return { featured: [], trending: [], editorChoice: [], newlyAdded: [], series: [] };
-    }
-  },
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const handle = (data, error, fallback = []) => {
+  if (error) { console.warn('[Supabase]', error.message); return fallback; }
+  return data ?? fallback;
 };
 
-// ── Seasons & Episodes API ─────────────────────────────────────────────────
-export const episodesAPI = {
-  async getSeasons(seriesId) {
-    try {
-      const { data, error } = await supabase
-        .from('seasons')
-        .select('*, episodes(*)')
-        .eq('series_id', seriesId)
-        .order('season_number');
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error('[getSeasons]', err.message);
-      return [];
-    }
-  },
+// ─── MOVIES ───────────────────────────────────────────────────────────────────
+
+/** Featured movies for hero carousel (is_featured = true) */
+export const fetchFeatured = async () => {
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,description,poster,hero_image,genre,category,year,rating,newly_added,is_series,is_featured')
+    .eq('is_featured', true)
+    .limit(6);
+  return handle(data, error);
 };
 
-// ── Ratings API ────────────────────────────────────────────────────────────
-export const ratingsAPI = {
-  async getUserRating(userId, movieId) {
-    try {
-      const { data, error } = await supabase
-        .from('movie_ratings')
-        .select('rating')
-        .eq('user_id', userId)
-        .eq('movie_id', movieId)
-        .maybeSingle();
-      if (error) throw error;
-      return data?.rating || 0;
-    } catch (err) {
-      console.error('[getUserRating]', err.message);
-      return 0;
-    }
-  },
-
-  async getAverageRating(movieId) {
-    try {
-      const { data, error } = await supabase
-        .from('movie_ratings')
-        .select('rating')
-        .eq('movie_id', movieId);
-      if (error) throw error;
-      if (!data?.length) return 0;
-      const avg = data.reduce((s, r) => s + r.rating, 0) / data.length;
-      return Math.round(avg * 10) / 10;
-    } catch (err) {
-      console.error('[getAverageRating]', err.message);
-      return 0;
-    }
-  },
-
-  async upsertRating(userId, movieId, rating) {
-    try {
-      const { data, error } = await supabase
-        .from('movie_ratings')
-        .upsert(
-          { user_id: userId, movie_id: movieId, rating, updated_at: new Date().toISOString() },
-          { onConflict: 'user_id,movie_id' }
-        )
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('[upsertRating]', err.message);
-      return null;
-    }
-  },
+/**
+ * All movies — used to build dynamic genre/category rows.
+ * Paginated: pass `page` (0-based) and `pageSize`.
+ */
+export const fetchMoviesByPage = async (page = 0, pageSize = 40) => {
+  const from = page * pageSize;
+  const to   = from + pageSize - 1;
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,poster,rating,genre,category,is_series,is_trending,newly_added,is_upcoming,release_date,duration')
+    .order('created_at', { ascending: false })
+    .range(from, to);
+  return handle(data, error);
 };
 
-// ── Auth API ───────────────────────────────────────────────────────────────
-export const authAPI = {
-  async signIn(email, password) {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      throw err;
-    }
-  },
+/** Trending movies */
+export const fetchTrending = async () => {
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,poster,rating,genre,category,is_series,is_trending,newly_added')
+    .eq('is_trending', true)
+    .limit(12);
+  return handle(data, error);
+};
 
-  async signUp(email, password) {
-    try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      throw err;
-    }
-  },
+/** Upcoming movies (is_upcoming = true or newly_added = 'UPCOMING') */
+export const fetchUpcoming = async () => {
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,poster,genre,is_series,release_date,newly_added')
+    .eq('is_upcoming', true)
+    .order('release_date', { ascending: true })
+    .limit(12);
+  return handle(data, error);
+};
 
-  async signOut() {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (err) {
-      console.error('[signOut]', err.message);
-    }
-  },
+// ─── WATCH PROGRESS (Continue Watching) ──────────────────────────────────────
 
-  async getSession() {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session;
-    } catch {
-      return null;
-    }
-  },
+/**
+ * Fetch continue-watching items for a user.
+ * Joins watch_progress → movies in a single round-trip.
+ */
+export const fetchContinueWatching = async (userId) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('watch_progress')
+    .select(`
+      id,
+      current_time_sec,
+      duration_sec,
+      season_number,
+      episode_number,
+      last_watched,
+      media_type,
+      movies (
+        id, title, poster, is_series, genre
+      )
+    `)
+    .eq('user_id', userId)
+    .order('last_watched', { ascending: false })
+    .limit(10);
+
+  if (error) { console.warn('[ContinueWatching]', error.message); return []; }
+
+  // Flatten into a single object per item
+  return (data ?? []).map((row) => ({
+    progressId:   row.id,
+    movieId:      row.movies?.id,
+    title:        row.movies?.title,
+    poster:       row.movies?.poster,
+    is_series:    row.movies?.is_series,
+    genre:        row.movies?.genre,
+    progress:     row.duration_sec > 0 ? row.current_time_sec / row.duration_sec : 0,
+    currentSec:   row.current_time_sec,
+    durationSec:  row.duration_sec,
+    season:       row.season_number,
+    episode:      row.episode_number,
+    remaining:    formatRemaining(row.current_time_sec, row.duration_sec),
+    lastWatched:  row.last_watched,
+  }));
+};
+
+const formatRemaining = (current, duration) => {
+  const rem = Math.max(duration - current, 0);
+  const m   = Math.floor(rem / 60);
+  const h   = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  return `${m}m`;
+};
+
+// ─── WATCHLIST (My List) ──────────────────────────────────────────────────────
+
+/** Fetch user's watchlist joined with movie details */
+export const fetchWatchlist = async (userId) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('watchlist')
+    .select(`
+      id,
+      created_at,
+      movies (
+        id, title, poster, rating, is_series, genre, newly_added, is_trending
+      )
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) { console.warn('[Watchlist]', error.message); return []; }
+  return (data ?? []).map((row) => ({ watchId: row.id, ...row.movies }));
+};
+
+/** Add movie to watchlist */
+export const addToWatchlist = async (userId, movieId) => {
+  const { error } = await supabase
+    .from('watchlist')
+    .upsert({ user_id: userId, movie_id: movieId }, { onConflict: 'user_id,movie_id' });
+  if (error) throw error;
+};
+
+/** Remove movie from watchlist */
+export const removeFromWatchlist = async (userId, movieId) => {
+  const { error } = await supabase
+    .from('watchlist')
+    .delete()
+    .eq('user_id', userId)
+    .eq('movie_id', movieId);
+  if (error) throw error;
+};
+
+// ─── Build genre/category map from a flat movies array ───────────────────────
+/**
+ * Takes the raw movies array and returns:
+ * { genres: string[], categories: string[], genreMap: {}, categoryMap: {} }
+ * All keys come from DB data — nothing is hardcoded.
+ */
+export const buildContentMap = (movies = []) => {
+  const genreMap    = {};
+  const categoryMap = {};
+
+  movies.forEach((m) => {
+    // genre column is text[] in Postgres
+    (m.genre || []).forEach((g) => {
+      if (!genreMap[g])    genreMap[g]    = [];
+      genreMap[g].push(m);
+    });
+    // category column is text[] in Postgres
+    (m.category || []).forEach((c) => {
+      if (!categoryMap[c]) categoryMap[c] = [];
+      categoryMap[c].push(m);
+    });
+  });
+
+  return {
+    genres:      Object.keys(genreMap),
+    categories:  Object.keys(categoryMap),
+    genreMap,
+    categoryMap,
+  };
 };
