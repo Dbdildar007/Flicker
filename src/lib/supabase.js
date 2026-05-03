@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';   // ← replace
-const SUPABASE_KEY = 'YOUR_ANON_KEY';       // ← replace
+const SUPABASE_URL  = 'https://cxbmopvqjmtnfiheqtob.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4Ym1vcHZxam10bmZpaGVxdG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNjQzNjEsImV4cCI6MjA4Nzg0MDM2MX0.rVR2zu3RdBkBW19mrhusDoRPrprpJLJSvkBHQ4kFyK4';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true },
@@ -26,7 +26,7 @@ export const fetchFeatured = async () => {
     .from('movies')
     .select('id,title,description,poster,hero_image,genre,category,year,rating,newly_added,is_series,is_featured')
     .eq('is_featured', true)
-    .limit(6);
+    .limit(10);
   return handle(data, error);
 };
 
@@ -36,7 +36,7 @@ export const fetchFeatured = async () => {
  */
 export const fetchMoviesByPage = async (page = 0, pageSize = 40) => {
   const from = page * pageSize;
-  const to   = from + pageSize - 1;
+  const to = from + pageSize - 1;
   const { data, error } = await supabase
     .from('movies')
     .select('id,title,poster,rating,genre,category,is_series,is_trending,newly_added,is_upcoming,release_date,duration')
@@ -51,7 +51,7 @@ export const fetchTrending = async () => {
     .from('movies')
     .select('id,title,poster,rating,genre,category,is_series,is_trending,newly_added')
     .eq('is_trending', true)
-    .limit(12);
+    .limit(20);
   return handle(data, error);
 };
 
@@ -62,8 +62,10 @@ export const fetchUpcoming = async () => {
     .select('id,title,poster,genre,is_series,release_date,newly_added')
     .eq('is_upcoming', true)
     .order('release_date', { ascending: true })
-    .limit(12);
+    .limit(20);
+  console.log('Upcoming movies:', data);
   return handle(data, error);
+  
 };
 
 // ─── WATCH PROGRESS (Continue Watching) ──────────────────────────────────────
@@ -90,32 +92,32 @@ export const fetchContinueWatching = async (userId) => {
     `)
     .eq('user_id', userId)
     .order('last_watched', { ascending: false })
-    .limit(10);
+    .limit(20);
 
   if (error) { console.warn('[ContinueWatching]', error.message); return []; }
 
   // Flatten into a single object per item
   return (data ?? []).map((row) => ({
-    progressId:   row.id,
-    movieId:      row.movies?.id,
-    title:        row.movies?.title,
-    poster:       row.movies?.poster,
-    is_series:    row.movies?.is_series,
-    genre:        row.movies?.genre,
-    progress:     row.duration_sec > 0 ? row.current_time_sec / row.duration_sec : 0,
-    currentSec:   row.current_time_sec,
-    durationSec:  row.duration_sec,
-    season:       row.season_number,
-    episode:      row.episode_number,
-    remaining:    formatRemaining(row.current_time_sec, row.duration_sec),
-    lastWatched:  row.last_watched,
+    progressId: row.id,
+    movieId: row.movies?.id,
+    title: row.movies?.title,
+    poster: row.movies?.poster,
+    is_series: row.movies?.is_series,
+    genre: row.movies?.genre,
+    progress: row.duration_sec > 0 ? row.current_time_sec / row.duration_sec : 0,
+    currentSec: row.current_time_sec,
+    durationSec: row.duration_sec,
+    season: row.season_number,
+    episode: row.episode_number,
+    remaining: formatRemaining(row.current_time_sec, row.duration_sec),
+    lastWatched: row.last_watched,
   }));
 };
 
 const formatRemaining = (current, duration) => {
   const rem = Math.max(duration - current, 0);
-  const m   = Math.floor(rem / 60);
-  const h   = Math.floor(m / 60);
+  const m = Math.floor(rem / 60);
+  const h = Math.floor(m / 60);
   if (h > 0) return `${h}h ${m % 60}m`;
   return `${m}m`;
 };
@@ -160,6 +162,19 @@ export const removeFromWatchlist = async (userId, movieId) => {
   if (error) throw error;
 };
 
+
+export const authAPI = {
+  async getSession() {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return session;
+    } catch (err) {
+      console.error('[authAPI.getSession]', err);
+      return null;
+    }
+  },
+};
 // ─── Build genre/category map from a flat movies array ───────────────────────
 /**
  * Takes the raw movies array and returns:
@@ -167,13 +182,13 @@ export const removeFromWatchlist = async (userId, movieId) => {
  * All keys come from DB data — nothing is hardcoded.
  */
 export const buildContentMap = (movies = []) => {
-  const genreMap    = {};
+  const genreMap = {};
   const categoryMap = {};
 
   movies.forEach((m) => {
     // genre column is text[] in Postgres
     (m.genre || []).forEach((g) => {
-      if (!genreMap[g])    genreMap[g]    = [];
+      if (!genreMap[g]) genreMap[g] = [];
       genreMap[g].push(m);
     });
     // category column is text[] in Postgres
@@ -184,8 +199,8 @@ export const buildContentMap = (movies = []) => {
   });
 
   return {
-    genres:      Object.keys(genreMap),
-    categories:  Object.keys(categoryMap),
+    genres: Object.keys(genreMap),
+    categories: Object.keys(categoryMap),
     genreMap,
     categoryMap,
   };
