@@ -17,6 +17,7 @@ import {
   addToWatchlist, removeFromWatchlist, buildContentMap,
 } from '../lib/supabase';
 
+
 // ─── Responsive scale ─────────────────────────────────────────────────────────
 const { width: SW, height: SH } = Dimensions.get('window');
 const rs = (s) => {
@@ -27,57 +28,58 @@ const rs = (s) => {
   return s;
 };
 
-const HERO_H         = SH * 0.60;
-const HEADER_H       = rs(56);
-const SCROLL_END     = rs(100);
-const PAGE_SIZE      = 40;
+const HERO_H = SH * 0.60;
+const HEADER_H = rs(50);
+const SCROLL_END = rs(100);
+const PAGE_SIZE = 40;
 
 // ─── Mock fallback data ───────────────────────────────────────────────────────
 const MOCK_FEATURED = [
-  { id: 'f1', title: 'NEON REBELLION', description: 'In a world where light is currency, one survivor risks everything to unplug the system.', poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=900', hero_image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=900', genre: ['Sci-Fi', 'Thriller'], category: ['originals'], year: 2024, rating: 8.4, newly_added: 'ORIGINAL', is_series: false, is_trending: true  },
-  { id: 'f2', title: 'DARK HORIZON',   description: 'A rogue astronaut uncovers a conspiracy spanning galaxies.',                               poster: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=900', hero_image: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=900', genre: ['Sci-Fi', 'Drama'],    category: ['drama'],     year: 2024, rating: 7.9, newly_added: null,       is_series: true,  is_trending: false },
-  { id: 'f3', title: 'CHROME CITY',    description: 'A detective navigates a dystopian megacity where AI rules the underworld.',               poster: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=900', hero_image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=900', genre: ['Action', 'Thriller'], category: ['action'],    year: 2024, rating: 8.1, newly_added: 'NEW',      is_series: false, is_trending: true  },
+  { id: 'f1', title: 'NEON REBELLION', description: 'In a world where light is currency, one survivor risks everything to unplug the system.', poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=900', hero_image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=900', genre: ['Sci-Fi', 'Thriller'], category: ['originals'], year: 2024, rating: 8.4, newly_added: 'ORIGINAL', is_series: false, is_trending: true },
+  { id: 'f2', title: 'DARK HORIZON', description: 'A rogue astronaut uncovers a conspiracy spanning galaxies.', poster: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=900', hero_image: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=900', genre: ['Sci-Fi', 'Drama'], category: ['drama'], year: 2024, rating: 7.9, newly_added: null, is_series: true, is_trending: false },
+  { id: 'f3', title: 'CHROME CITY', description: 'A detective navigates a dystopian megacity where AI rules the underworld.', poster: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=900', hero_image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=900', genre: ['Action', 'Thriller'], category: ['action'], year: 2024, rating: 8.1, newly_added: 'NEW', is_series: false, is_trending: true },
 ];
 const MOCK_CONTINUE = [
-  { movieId: 'c1', title: 'Mars Colony',       poster: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=500', progress: 0.72, season: 2, episode: 4, remaining: '12m', is_series: true  },
-  { movieId: 'c2', title: 'Midnight Protocol', poster: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500', progress: 0.38, season: 1, episode: 7, remaining: '28m', is_series: true  },
-  { movieId: 'c3', title: 'Velocity',          poster: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=500', progress: 0.55, season: null, episode: null, remaining: '54m', is_series: false },
+  { movieId: 'c1', title: 'Mars Colony', poster: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=500', progress: 0.72, season: 2, episode: 4, remaining: '12m', is_series: true },
+  { movieId: 'c2', title: 'Midnight Protocol', poster: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500', progress: 0.38, season: 1, episode: 7, remaining: '28m', is_series: true },
+  { movieId: 'c3', title: 'Velocity', poster: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=500', progress: 0.55, season: null, episode: null, remaining: '54m', is_series: false },
 ];
 const MOCK_WATCHLIST = [
-  { id: 'w1', title: 'Orbital Decay',   poster: 'https://images.unsplash.com/photo-1516849841032-87cbac4d88f7?w=400', rating: 7.6, is_series: false, newly_added: 'NEW',  is_trending: false },
-  { id: 'w2', title: 'The Last Signal', poster: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=400', rating: 8.2, is_series: true,  newly_added: null,    is_trending: true  },
-  { id: 'w3', title: 'Phantom Circuit', poster: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400', rating: 7.1, is_series: false, newly_added: null,    is_trending: false },
+  { id: 'w1', title: 'Orbital Decay', poster: 'https://images.unsplash.com/photo-1516849841032-87cbac4d88f7?w=400', rating: 7.6, is_series: false, newly_added: 'NEW', is_trending: false },
+  { id: 'w2', title: 'The Last Signal', poster: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=400', rating: 8.2, is_series: true, newly_added: null, is_trending: true },
+  { id: 'w3', title: 'Phantom Circuit', poster: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400', rating: 7.1, is_series: false, newly_added: null, is_trending: false },
 ];
 const MOCK_UPCOMING = [
-  { id: 'u1', title: 'Solar Drift',  poster: 'https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=400', release_date: '2025-06-15', is_series: false },
-  { id: 'u2', title: 'Echo Chamber', poster: 'https://images.unsplash.com/photo-1543722530-d2c3201371e7?w=400', release_date: '2025-07-20', is_series: true  },
-  { id: 'u3', title: 'Iron Veil',    poster: 'https://images.unsplash.com/photo-1542372147193-a7aca54189cd?w=400', release_date: '2025-08-05', is_series: false },
-  { id: 'u4', title: 'Neon Ghosts',  poster: 'https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=400', release_date: '2025-09-12', is_series: true  },
+  { id: 'u1', title: 'Solar Drift', poster: 'https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=400', release_date: '2025-06-15', is_series: false },
+  { id: 'u2', title: 'Echo Chamber', poster: 'https://images.unsplash.com/photo-1543722530-d2c3201371e7?w=400', release_date: '2025-07-20', is_series: true },
+  { id: 'u3', title: 'Iron Veil', poster: 'https://images.unsplash.com/photo-1542372147193-a7aca54189cd?w=400', release_date: '2025-08-05', is_series: false },
+  { id: 'u4', title: 'Neon Ghosts', poster: 'https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=400', release_date: '2025-09-12', is_series: true },
 ];
 const MOCK_ALL_MOVIES = [
-  { id: 'a1', title: 'Velocity X',    poster: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=400', rating: 7.8, genre: ['Action'], category: ['action'],   is_series: false, is_trending: true,  newly_added: null    },
-  { id: 'a2', title: 'Thunder Run',   poster: 'https://images.unsplash.com/photo-1542372147193-a7aca54189cd?w=400', rating: 7.2, genre: ['Action'], category: ['action'],   is_series: false, is_trending: false, newly_added: 'NEW'   },
-  { id: 'd1', title: 'Broken Ties',   poster: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=400', rating: 8.3, genre: ['Drama'],  category: ['drama'],    is_series: true,  is_trending: false, newly_added: null    },
-  { id: 'd2', title: 'Quiet Storm',   poster: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?w=400', rating: 7.9, genre: ['Drama'],  category: ['drama'],    is_series: false, is_trending: false, newly_added: null    },
-  { id: 't1', title: 'Shadow Line',   poster: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=400', rating: 8.0, genre: ['Thriller'],category:['thriller'], is_series: false, is_trending: true,  newly_added: null    },
-  { id: 's1', title: 'Quantum Rift',  poster: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=400', rating: 8.5, genre: ['Sci-Fi'], category: ['sci-fi'],   is_series: false, is_trending: false, newly_added: 'NEW'   },
-  { id: 's2', title: 'Mars Born',     poster: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=400', rating: 8.2, genre: ['Sci-Fi'], category: ['sci-fi'],   is_series: true,  is_trending: true,  newly_added: null    },
+  { id: 'a1', title: 'Velocity X', poster: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=400', rating: 7.8, genre: ['Action'], category: ['action'], is_series: false, is_trending: true, newly_added: null },
+  { id: 'a2', title: 'Thunder Run', poster: 'https://images.unsplash.com/photo-1542372147193-a7aca54189cd?w=400', rating: 7.2, genre: ['Action'], category: ['action'], is_series: false, is_trending: false, newly_added: 'NEW' },
+  { id: 'd1', title: 'Broken Ties', poster: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=400', rating: 8.3, genre: ['Drama'], category: ['drama'], is_series: true, is_trending: false, newly_added: null },
+  { id: 'd2', title: 'Quiet Storm', poster: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?w=400', rating: 7.9, genre: ['Drama'], category: ['drama'], is_series: false, is_trending: false, newly_added: null },
+  { id: 't1', title: 'Shadow Line', poster: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=400', rating: 8.0, genre: ['Thriller'], category: ['thriller'], is_series: false, is_trending: true, newly_added: null },
+  { id: 's1', title: 'Quantum Rift', poster: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=400', rating: 8.5, genre: ['Sci-Fi'], category: ['sci-fi'], is_series: false, is_trending: false, newly_added: 'NEW' },
+  { id: 's2', title: 'Mars Born', poster: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=400', rating: 8.2, genre: ['Sci-Fi'], category: ['sci-fi'], is_series: true, is_trending: true, newly_added: null },
 ];
+
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ message, visible }) {
   const opac = useRef(new Animated.Value(0)).current;
-  const ty    = useRef(new Animated.Value(rs(20))).current;
+  const ty = useRef(new Animated.Value(rs(20))).current;
   useEffect(() => {
     if (visible) {
       Animated.parallel([
         Animated.timing(opac, { toValue: 1, duration: 260, useNativeDriver: true }),
-        Animated.spring(ty,   { toValue: 0, useNativeDriver: true, tension: 200, friction: 18 }),
+        Animated.spring(ty, { toValue: 0, useNativeDriver: true, tension: 200, friction: 18 }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.timing(opac, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(ty,   { toValue: rs(20), duration: 220, useNativeDriver: true }),
+        Animated.timing(ty, { toValue: rs(20), duration: 220, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -100,7 +102,7 @@ function Toast({ message, visible }) {
 function useToast() {
   const [state, setState] = useState({ message: '', visible: false });
   const timerRef = useRef(null);
-  const show = useCallback((message, duration = 2500) => {
+  const show = useCallback((message, duration = 1500) => {
     clearTimeout(timerRef.current);
     setState({ message, visible: true });
     timerRef.current = setTimeout(() => setState(s => ({ ...s, visible: false })), duration);
@@ -114,7 +116,7 @@ function NoInternet({ onRetry }) {
   useEffect(() => {
     Animated.loop(Animated.sequence([
       Animated.timing(pulseA, { toValue: 1.08, duration: 1200, useNativeDriver: true }),
-      Animated.timing(pulseA, { toValue: 1,    duration: 1200, useNativeDriver: true }),
+      Animated.timing(pulseA, { toValue: 1, duration: 1200, useNativeDriver: true }),
     ])).start();
   }, []);
   return (
@@ -211,9 +213,9 @@ function HomeSkeleton() {
 // ─── usePressScale ────────────────────────────────────────────────────────────
 function usePressScale(to = 0.94) {
   const anim = useRef(new Animated.Value(1)).current;
-  const cfg  = { useNativeDriver: true, tension: 300, friction: 10 };
-  const onIn  = () => Animated.spring(anim, { toValue: to, ...cfg }).start();
-  const onOut = () => Animated.spring(anim, { toValue: 1,  ...cfg }).start();
+  const cfg = { useNativeDriver: true, tension: 300, friction: 10 };
+  const onIn = () => Animated.spring(anim, { toValue: to, ...cfg }).start();
+  const onOut = () => Animated.spring(anim, { toValue: 1, ...cfg }).start();
   return { anim, onIn, onOut };
 }
 
@@ -226,7 +228,7 @@ function CountdownChip({ releaseDate }) {
       if (diff <= 0) { setLabel('Out Now'); return; }
       const d = Math.floor(diff / 86400000);
       const h = Math.floor((diff % 86400000) / 3600000);
-      const m = Math.floor((diff % 3600000)  / 60000);
+      const m = Math.floor((diff % 3600000) / 60000);
       setLabel(d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`);
     };
     update();
@@ -252,7 +254,7 @@ function TrendingBadge() {
         colors={['rgba(255,215,0,0.30)', 'rgba(255,215,0,0.10)']}
         style={[StyleSheet.absoluteFill, { borderRadius: rs(5) }]}
       />
-      <Text style={S.trendingText}>🔥 TRENDING</Text>
+      <Text style={S.trendingText}>TRENDING</Text>
     </View>
   );
 }
@@ -299,7 +301,14 @@ function SectionHeader({ title, onSeeAll }) {
     <View style={S.sectionHeader}>
       <View style={S.sectionTitleRow}>
         <View style={S.titleAccentBar} />
-        <Text style={S.sectionTitle}>{title}</Text>
+        <Text
+          style={S.sectionTitle}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
+
       </View>
       {onSeeAll && (
         <TouchableOpacity onPress={onSeeAll} activeOpacity={0.75}>
@@ -329,13 +338,13 @@ function GlassBtn({ label, icon, accent, onPress, style }) {
       <Animated.View style={[S.glassBtn, accent && S.glassBtnAccent, { transform: [{ scale: anim }] }]}>
         {accent ? (
           <LinearGradient
-            colors={[COLORS.accent, COLORS.accentDim, '#009A6E']}
+            colors={[COLORS.accent, COLORS.accentDim, '#45b495ff']}
             start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
             style={[StyleSheet.absoluteFill, { borderRadius: rs(28) }]}
           />
         ) : (
           <LinearGradient
-            colors={['rgba(0,255,178,0.13)', 'rgba(0,255,178,0.05)']}
+            colors={['rgba(238, 244, 242, 0.13)', 'rgba(247, 252, 251, 0.05)']}
             style={[StyleSheet.absoluteFill, { borderRadius: rs(28) }]}
           />
         )}
@@ -380,59 +389,60 @@ function IconBtn({ icon, onPress }) {
 // ─── APP HEADER ───────────────────────────────────────────────────────────────
 function AppHeader({ scrollY, navigation }) {
   const insets = useSafeAreaInsets();
+
   const bgColor = scrollY.interpolate({
     inputRange: [0, SCROLL_END],
-    outputRange: ['rgba(3,15,12,0.0)', 'rgba(3,15,12,0.96)'],
+    outputRange: ['rgba(3,15,12,0.5)', 'rgba(3,15,12,0.96)'], // start at 50% opacity
     extrapolate: 'clamp',
   });
-  const shadowO = scrollY.interpolate({
-    inputRange: [0, SCROLL_END], outputRange: [0, 0.7], extrapolate: 'clamp',
-  });
+
   return (
-    <Animated.View style={[S.header, { paddingTop: insets.top + rs(4), height: HEADER_H + insets.top, backgroundColor: bgColor, shadowOpacity: shadowO }]}>
-      {/* Logo — only "F" rendered with glow + cuts */}
-      <View style={S.logoWrap}>
-        <View style={S.logoFGlow} />
-        <Text style={S.logoF}>F</Text>
-        <View style={S.logoCut1} />
-        <View style={S.logoCut2} />
-        <Text style={S.logoRest}>LICKS</Text>
-      </View>
+    <Animated.View
+      style={[
+        S.header,
+        {
+          paddingTop: insets.top + rs(4),
+          height: HEADER_H + insets.top,
+          backgroundColor: bgColor,
+          // remove shadow styles to avoid black line
+        },
+      ]}
+    >
+      {/* Left side: F word */}
 
-      {/* Bottom gradient fade — blends border into bg */}
-      <LinearGradient
-        colors={['rgba(3,15,12,0)', COLORS.bg]}
-        start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-        style={S.headerBottomFade}
-        pointerEvents="none"
-      />
+      <Text style={{ color: '#fff', fontSize: rs(18), fontWeight: 'bold' }}>
+        F
+      </Text>
 
-      <View style={S.headerRight}>
-        <IconBtn icon="🔍" onPress={() => { console.log('Search'); /* TODO: navigation.navigate('SearchScreen') */ }} />
-        <View style={{ width: rs(10) }} />
-        <IconBtn icon="👤" onPress={() => { console.log('Profile'); /* TODO: navigation.navigate('ProfileScreen') */ }} />
+      {/* Right side: Profile icon */}
+      <View style={{ backgroundColor: 'red', padding: rs(0), borderRadius: rs(20) }}>
+        <IconBtn
+          icon="👤"
+          onPress={() => navigation.navigate('ProfileScreen')}
+        />
       </View>
     </Animated.View>
   );
 }
 
+
 // ─── HERO CAROUSEL ────────────────────────────────────────────────────────────
 function HeroCarousel({ items, navigation, onAddList }) {
-  const [idx, setIdx]  = useState(0);
-  const fadeAnim       = useRef(new Animated.Value(1)).current;
-  const slideAnim      = useRef(new Animated.Value(0)).current;
-  const timerRef       = useRef(null);
+  const [idx, setIdx] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef(null);
 
   const goTo = useCallback((nextIdx, dir = 1) => {
     clearInterval(timerRef.current);
     Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 0,           duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: dir * -rs(22), duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setIdx(nextIdx);
       slideAnim.setValue(dir * rs(22));
       Animated.parallel([
-        Animated.timing(fadeAnim,  { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 160, friction: 20 }),
       ]).start();
     });
@@ -446,27 +456,41 @@ function HeroCarousel({ items, navigation, onAddList }) {
   const item = items[idx];
   if (!item) return null;
 
+
   return (
     <View style={[S.heroWrap, { height: HERO_H }]}>
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
-        <ImageBackground source={{ uri: item.hero_image || item.poster }} style={StyleSheet.absoluteFill} resizeMode="cover">
-          <LinearGradient
-            colors={['rgba(3,15,12,0.10)', 'rgba(3,15,12,0.0)', 'rgba(3,15,12,0.50)', 'rgba(3,15,12,1.0)']}
-            locations={[0, 0.20, 0.60, 1]}
+
+        {(item?.hero_image || item?.poster) ? (
+          <ImageBackground
+            source={{ uri: item.hero_image || item.poster }}
             style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={['rgba(3,15,12,0.55)', 'rgba(3,15,12,0.0)']}
-            start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-          {/* Bottom blend into background */}
-          <LinearGradient
-            colors={['rgba(3,15,12,0)', COLORS.bg]}
-            start={{ x: 0.5, y: 0.82 }} end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </ImageBackground>
+            resizeMode="cover"
+          >
+            <LinearGradient
+              colors={['rgba(3,15,12,0.10)', 'rgba(3,15,12,0.0)', 'rgba(3,15,12,0.50)', 'rgba(3,15,12,1.0)']}
+              locations={[0, 0.20, 0.60, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              colors={['rgba(3,15,12,0.55)', 'rgba(3,15,12,0.0)']}
+              start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              colors={['rgba(3,15,12,0)', COLORS.bg]}
+              start={{ x: 0.5, y: 0.82 }} end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </ImageBackground>
+        ) : (
+          // Fallback: grey screen with title
+          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: '#555', justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }} numberOfLines={1}
+              ellipsizeMode="tail" >{item.title}</Text>
+          </View>
+        )}
+
       </Animated.View>
 
       <Animated.View style={[S.heroContent, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
@@ -485,8 +509,9 @@ function HeroCarousel({ items, navigation, onAddList }) {
           {item.year && <Text style={S.heroBadgeSep}>· {item.year}</Text>}
           {item.is_series && <Text style={S.heroBadgeSep}>· SERIES</Text>}
         </View>
-        <Text style={S.heroTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={S.heroDesc}  numberOfLines={2}>{item.description}</Text>
+        <Text style={S.heroTitle} numberOfLines={2}
+          ellipsizeMode="tail">{item.title}</Text>
+        <Text style={S.heroDesc} numberOfLines={2}>{item.description}</Text>
         <View style={S.heroBtnRow}>
           <GlassBtn
             accent icon="▶" label="Play Now"
@@ -527,27 +552,35 @@ function ContinueCard({ item }) {
           style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
         />
         <View style={S.contCardInner}>
-          <ImageBackground
-            source={{ uri: item.poster }}
-            style={S.contPoster}
-            imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
-          >
-            <LinearGradient
-              colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.82)']}
-              style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
-            />
-            {item.is_series && <SeriesBadge />}
-            <View style={S.progressOuter}>
-              <View style={S.progressBg} />
-              <View style={[S.progressFill, { width: `${Math.min(Math.round((item.progress || 0) * 100), 100)}%` }]} />
+          {(item?.hero_image || item?.poster) ? (
+            <ImageBackground
+              source={{ uri: item.poster }}
+              style={S.contPoster}
+              imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
+            >
+              <LinearGradient
+                colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.82)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
+              />
+              {item.is_series && <SeriesBadge />}
+              <View style={S.progressOuter}>
+                <View style={S.progressBg} />
+                <View style={[S.progressFill, { width: `${Math.min(Math.round((item.progress || 0) * 100), 100)}%` }]} />
+              </View>
+            </ImageBackground>) : (
+            <View style={{ borderRadius: rs(11), overflow: 'hidden', backgroundColor: '#555', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }} numberOfLines={1}
+                ellipsizeMode="tail" >{item.title}</Text>
             </View>
-          </ImageBackground>
+          )}
+
           <View style={S.contInfo}>
             <LinearGradient
               colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']}
               style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]}
             />
-            <Text style={S.contTitle} numberOfLines={1}>{item.title}</Text>
+            <Text style={S.contTitle} numberOfLines={1}
+              ellipsizeMode="tail">{item.title}</Text>
             <Text style={S.contMeta}>
               {item.is_series && item.season ? `S${item.season} E${item.episode} · ` : ''}{item.remaining} left
             </Text>
@@ -573,26 +606,54 @@ function WatchlistCard({ item, onRemove }) {
           style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
         />
         <View style={S.posterCardInner}>
-          <ImageBackground
-            source={{ uri: item.poster }}
-            style={S.posterImg}
-            imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
-          >
-            <LinearGradient
-              colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.88)']}
-              style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
-            />
-            {item.is_series  && <SeriesBadge />}
-            {item.is_trending && <TrendingBadge />}
-            {item.newly_added && <NewBadge label={item.newly_added} />}
-            <RatingChip rating={item.rating} />
-          </ImageBackground>
+          {item?.poster ? (
+            <ImageBackground
+              source={{ uri: item.poster }}
+              style={S.posterImg}
+              imageStyle={{
+                borderTopLeftRadius: rs(10),
+                borderTopRightRadius: rs(10),
+              }}
+            >
+              <LinearGradient
+                colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.88)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
+              />
+              {item.is_series && <SeriesBadge />}
+              {item.is_trending && <TrendingBadge />}
+              {item.newly_added && <NewBadge label={item.newly_added} />}
+              <RatingChip rating={item.rating} />
+            </ImageBackground>
+          ) : (
+            <View
+              style={[
+                S.posterImg,
+                {
+                  backgroundColor: '#4a4c4cff', // grey fallback
+                  borderTopLeftRadius: rs(10),
+                  borderTopRightRadius: rs(10),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
+              ]}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}
+                numberOfLines={1}
+                ellipsizeMode="tail">
+                {item.title}
+              </Text>
+            </View>
+          )}
+
+
+
           <View style={S.posterInfo}>
             <LinearGradient
               colors={['rgba(0,255,178,0.08)', 'rgba(3,15,12,0.5)']}
               style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]}
             />
-            <Text style={S.posterTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={S.posterTitle} numberOfLines={1}
+              ellipsizeMode="tail">{item.title}</Text>
             <TouchableOpacity
               onPress={() => onRemove?.(item)}
               style={S.removeListBtn} activeOpacity={0.82}
@@ -606,6 +667,18 @@ function WatchlistCard({ item, onRemove }) {
           </View>
         </View>
       </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+function NotificationIcon() {
+  const [enabled, setEnabled] = useState(false);
+
+  return (
+    <TouchableOpacity onPress={() => setEnabled(prev => !prev)}>
+      <Text style={{ fontSize: rs(15), color: '#fff',paddingEnd:4 }}>
+        {enabled ? '🔔' : '🔕'}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -625,24 +698,53 @@ function UpcomingCard({ item }) {
           style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
         />
         <View style={S.posterCardInner}>
-          <ImageBackground
-            source={{ uri: item.poster }}
-            style={S.posterImg}
-            imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
-          >
-            <LinearGradient
-              colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.85)']}
-              style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
-            />
-            {item.is_series && <SeriesBadge />}
-            {item.release_date && <CountdownChip releaseDate={item.release_date} />}
-          </ImageBackground>
+          {item?.poster ? (
+            <ImageBackground
+              source={{ uri: item.poster }}
+              style={S.posterImg}
+              imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
+            >
+              <LinearGradient
+                colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.85)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
+              />
+
+              <View style={{ flexDirection: 'row', alignItems: 'center',justifyContent:'space-between' }}>
+                {item.is_series && <SeriesBadge />}
+                <View style={{ width: rs(8) }} />
+                <NotificationIcon />
+              </View>
+              {item.release_date && <CountdownChip releaseDate={item.release_date} />}
+
+            </ImageBackground>
+          ) : (
+            <View
+              style={[
+                S.posterImg,
+                {
+                  backgroundColor: '#666', // grey fallback
+                  borderTopLeftRadius: rs(10),
+                  borderTopRightRadius: rs(10),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
+              ]}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}
+                numberOfLines={1}
+                ellipsizeMode="tail">
+                {item.title}
+              </Text>
+            </View>
+          )}
+
           <View style={S.posterInfo}>
             <LinearGradient
               colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']}
               style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]}
             />
-            <Text style={S.posterTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={S.posterTitle} numberOfLines={1}
+              ellipsizeMode="tail">{item.title}</Text>
           </View>
         </View>
       </Animated.View>
@@ -665,58 +767,66 @@ function MovieCard({ item, onAddList }) {
           style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
         />
         <View style={S.genreCardInner}>
-          <ImageBackground
-            source={{ uri: item.poster }}
-            style={S.genreImg}
-            imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
-          >
-            <LinearGradient
-              colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.90)']}
-              style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
-            />
-            {/* Overlay badges — only shown when true */}
-            {item.is_series   && <SeriesBadge />}
-            {item.is_trending  && (
-              <View style={[S.trendingBadge, { bottom: rs(30), top: 'auto', left: rs(7), right: 'auto' }]}>
-                <LinearGradient
-                  colors={['rgba(255,215,0,0.30)', 'rgba(255,215,0,0.10)']}
-                  style={[StyleSheet.absoluteFill, { borderRadius: rs(5) }]}
-                />
-                <Text style={S.trendingText}>🔥</Text>
-              </View>
-            )}
-            {item.newly_added && (
-              <View style={S.newBadge}>
-                <LinearGradient
-                  colors={[COLORS.accentGlow, 'rgba(0,255,178,0.10)']}
-                  style={[StyleSheet.absoluteFill, { borderRadius: rs(5) }]}
-                />
-                <Text style={S.newBadgeText}>{item.newly_added}</Text>
-              </View>
-            )}
-            <RatingChip rating={item.rating} />
-            {/* + List pill */}
-            <TouchableOpacity
-              onPress={() => onAddList?.(item)} style={S.addListPill} activeOpacity={0.82}
+          {item?.poster ? (
+            <ImageBackground
+              source={{ uri: item.poster }}
+              style={S.genreImg}
+              imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}
             >
               <LinearGradient
-                colors={['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.08)']}
-                style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+                colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.90)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]}
               />
-              <LinearGradient
-                colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
-              />
-              <Text style={S.addListText}>+ List</Text>
-            </TouchableOpacity>
-          </ImageBackground>
+              {/* Overlay badges — only shown when true */}
+              {item.is_series && <SeriesBadge />}
+            {item.is_trending && <TrendingBadge />}
+              {item.newly_added && <NewBadge label={item.newly_added} />}
+              
+              <RatingChip rating={item.rating} />
+              {/* + List pill */}
+              <TouchableOpacity
+                onPress={() => onAddList?.(item)} style={S.addListPill} activeOpacity={0.82}
+              >
+                <LinearGradient
+                  colors={['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.08)']}
+                  style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+                />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+                />
+                <Text style={S.addListText}>+ List</Text>
+              </TouchableOpacity>
+            </ImageBackground>
+
+          ) : (
+            <View
+              style={[
+                S.posterImg,
+                {
+                  backgroundColor: '#666', // grey fallback
+                  borderTopLeftRadius: rs(10),
+                  borderTopRightRadius: rs(10),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
+              ]}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }} numberOfLines={1}
+                ellipsizeMode="tail">
+                {item.title}
+              </Text>
+            </View>
+          )}
+
           <View style={S.genreInfo}>
             <LinearGradient
               colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']}
               style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]}
             />
-            <Text style={S.genreTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={S.genreTitle} numberOfLines={1}
+              ellipsizeMode="tail">{item.title}</Text>
           </View>
         </View>
       </Animated.View>
@@ -749,26 +859,26 @@ function ContentRow({ title, data, onSeeAll, onAddList }) {
 
 // ─── HOME SCREEN ──────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
-  const insets        = useSafeAreaInsets();
-  const scrollY       = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
   const { toast, showToast } = useToast();
 
   // State
-  const [isConnected,    setIsConnected]    = useState(true);
+  const [isConnected, setIsConnected] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [refreshing,     setRefreshing]     = useState(false);
-  const [featured,       setFeatured]       = useState([]);
-  const [continuing,     setContinuing]     = useState([]);
-  const [watchlist,      setWatchlist]      = useState([]);
-  const [upcoming,       setUpcoming]       = useState([]);
-  const [allMovies,      setAllMovies]      = useState([]);
-  const [page,           setPage]           = useState(0);
-  const [hasMore,        setHasMore]        = useState(true);
-  const [loadingMore,    setLoadingMore]    = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [featured, setFeatured] = useState([]);
+  const [continuing, setContinuing] = useState([]);
+  const [watchlist, setWatchlist] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
+  const [allMovies, setAllMovies] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Entrance animation
   const entryOpac = useRef(new Animated.Value(0)).current;
-  const entryY    = useRef(new Animated.Value(rs(24))).current;
+  const entryY = useRef(new Animated.Value(rs(24))).current;
 
   // Build genre/category map from allMovies
   const { genres, categories, genreMap, categoryMap } = useMemo(
@@ -805,7 +915,7 @@ export default function HomeScreen({ navigation }) {
     if (!loadingInitial) {
       Animated.parallel([
         Animated.timing(entryOpac, { toValue: 1, duration: 480, useNativeDriver: true }),
-        Animated.spring(entryY,    { toValue: 0, useNativeDriver: true, tension: 90, friction: 18 }),
+        Animated.spring(entryY, { toValue: 0, useNativeDriver: true, tension: 90, friction: 18 }),
       ]).start();
     }
   }, [loadingInitial]);
@@ -815,18 +925,18 @@ export default function HomeScreen({ navigation }) {
     try {
       // Run all independent fetches in parallel — single round-trip feel
       const [feat, cw, wl, up, movies] = await Promise.all([
-        fetchFeatured()                    .catch(() => null),
-        fetchContinueWatching(null)        .catch(() => null), // pass real userId
-        fetchWatchlist(null)               .catch(() => null), // pass real userId
-        fetchUpcoming()                    .catch(() => null),
-        fetchMoviesByPage(0, PAGE_SIZE)    .catch(() => null),
+        fetchFeatured().catch(() => null),
+        fetchContinueWatching(null).catch(() => null), // pass real userId
+        fetchWatchlist(null).catch(() => null), // pass real userId
+        fetchUpcoming().catch(() => null),
+        fetchMoviesByPage(0, PAGE_SIZE).catch(() => null),
       ]);
 
-      setFeatured(   feat?.length   ? feat   : MOCK_FEATURED);
-      setContinuing( cw?.length     ? cw     : MOCK_CONTINUE);
-      setWatchlist(  wl?.length     ? wl     : MOCK_WATCHLIST);
-      setUpcoming(   up?.length     ? up     : MOCK_UPCOMING);
-      setAllMovies(  movies?.length ? movies : MOCK_ALL_MOVIES);
+      setFeatured(feat?.length ? feat : MOCK_FEATURED);
+      setContinuing(cw?.length ? cw : MOCK_CONTINUE);
+      setWatchlist(wl?.length ? wl : MOCK_WATCHLIST);
+      setUpcoming(up?.length ? up : MOCK_UPCOMING);
+      setAllMovies(movies?.length ? movies : MOCK_ALL_MOVIES);
       setPage(1);
       setHasMore((movies?.length ?? 0) === PAGE_SIZE);
 
@@ -1063,7 +1173,7 @@ export default function HomeScreen({ navigation }) {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: COLORS.bg },
+  root: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { flex: 1 },
 
   // Skeleton
@@ -1080,7 +1190,7 @@ const S = StyleSheet.create({
     borderRadius: rs(12), overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.glassBorder,
     zIndex: 999, maxWidth: SW * 0.85,
-    ...SHADOW.teal,
+    ...SHADOW.teal, elevation: 0
   },
   toastText: { color: COLORS.text, fontSize: rs(13), fontWeight: '600', textAlign: 'center' },
 
@@ -1094,7 +1204,7 @@ const S = StyleSheet.create({
   },
   noInternetEmoji: { fontSize: rs(44) },
   noInternetTitle: { color: COLORS.text, fontSize: rs(22), fontWeight: '800', marginBottom: rs(10), textAlign: 'center' },
-  noInternetSub:   { color: COLORS.textSub, fontSize: rs(14), textAlign: 'center', lineHeight: rs(21), marginBottom: rs(32) },
+  noInternetSub: { color: COLORS.textSub, fontSize: rs(14), textAlign: 'center', lineHeight: rs(21), marginBottom: rs(32) },
   retryBtn: {
     paddingHorizontal: rs(32), paddingVertical: rs(13),
     borderRadius: rs(28), overflow: 'hidden',
@@ -1104,13 +1214,15 @@ const S = StyleSheet.create({
 
   // Header
   header: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: rs(18),
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: rs(4) },
-    shadowRadius: rs(14),
-    elevation: 16,
   },
   headerBottomFade: {
     position: 'absolute', bottom: -rs(18), left: 0, right: 0, height: rs(18),
@@ -1172,9 +1284,9 @@ const S = StyleSheet.create({
     position: 'absolute', bottom: rs(14), left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'center', gap: rs(6),
   },
-  dot:        { height: rs(4), borderRadius: rs(2) },
-  dotActive:  { width: rs(22), backgroundColor: COLORS.accent, shadowColor: COLORS.accent, shadowOpacity: 0.9, shadowRadius: rs(5) },
-  dotInactive:{ width: rs(6),  backgroundColor: COLORS.textMuted },
+  dot: { height: rs(4), borderRadius: rs(2) },
+  dotActive: { width: rs(22), backgroundColor: COLORS.accent, shadowColor: COLORS.accent, shadowOpacity: 0.9, shadowRadius: rs(5) },
+  dotInactive: { width: rs(6), backgroundColor: COLORS.textMuted },
 
   // Glass button
   glassBtn: {
@@ -1184,18 +1296,18 @@ const S = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.glassBorder, ...SHADOW.teal,
   },
   glassBtnAccent: { borderColor: COLORS.accentDim },
-  glassBtnIcon:   { color: COLORS.textSub, fontSize: rs(13), marginRight: rs(6), fontWeight: '800' },
-  glassBtnLabel:  { color: COLORS.textSub, fontSize: rs(12), fontWeight: '700', letterSpacing: 0.4 },
+  glassBtnIcon: { color: COLORS.textSub, fontSize: rs(13), marginRight: rs(6), fontWeight: '800' },
+  glassBtnLabel: { color: COLORS.textSub, fontSize: rs(12), fontWeight: '700', letterSpacing: 0.4 },
 
   // Section
-  section:       { marginTop: rs(26) },
+  section: { marginTop: rs(26) },
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: rs(18), marginBottom: rs(12),
   },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center' },
-  titleAccentBar:  {
+  titleAccentBar: {
     width: rs(3), height: rs(18), borderRadius: rs(2),
     backgroundColor: COLORS.accent, marginRight: rs(8),
     shadowColor: COLORS.accent, shadowOpacity: 0.8, shadowRadius: rs(6),
@@ -1218,14 +1330,14 @@ const S = StyleSheet.create({
   },
   seriesBadgeText: { color: COLORS.red, fontSize: rs(7), fontWeight: '900', letterSpacing: 0.8 },
   trendingBadge: {
-    position: 'absolute', top: rs(7), right: rs(7),
+    position: 'absolute', top: rs(7), right: rs(4),
     paddingHorizontal: rs(7), paddingVertical: rs(3),
     borderRadius: rs(5), overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,215,0,0.35)',
   },
   trendingText: { color: COLORS.gold, fontSize: rs(7), fontWeight: '900', letterSpacing: 0.5 },
   newBadge: {
-    position: 'absolute', bottom: rs(32), left: rs(7),
+    position: 'absolute', bottom: rs(10), left: rs(7),
     paddingHorizontal: rs(7), paddingVertical: rs(2),
     borderRadius: rs(5), overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.glassBorder,
@@ -1260,26 +1372,26 @@ const S = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.glassBorder, ...SHADOW.dark,
   },
   contCardInner: { borderRadius: rs(11), overflow: 'hidden', backgroundColor: COLORS.bg2 },
-  contPoster:    { width: '100%', height: rs(112) },
+  contPoster: { width: '100%', height: rs(112) },
   progressOuter: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: rs(8), paddingBottom: rs(7) },
-  progressBg:    { height: rs(3), backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: rs(2) },
-  progressFill:  {
+  progressBg: { height: rs(3), backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: rs(2) },
+  progressFill: {
     position: 'absolute', left: rs(8), bottom: rs(7),
     height: rs(3), backgroundColor: COLORS.accent, borderRadius: rs(2),
     shadowColor: COLORS.accent, shadowOpacity: 0.9, shadowRadius: rs(4),
   },
-  contInfo:      { paddingHorizontal: rs(10), paddingVertical: rs(9), overflow: 'hidden' },
-  contTitle:     { color: COLORS.text,    fontSize: rs(12), fontWeight: '700', marginBottom: rs(3) },
-  contMeta:      { color: COLORS.textSub, fontSize: rs(10), fontWeight: '500' },
+  contInfo: { paddingHorizontal: rs(10), paddingVertical: rs(9), overflow: 'hidden' },
+  contTitle: { color: COLORS.text, fontSize: rs(12), fontWeight: '700', marginBottom: rs(3) },
+  contMeta: { color: COLORS.textSub, fontSize: rs(10), fontWeight: '500' },
 
   // Poster card (watchlist + upcoming — same size)
   posterCard: {
-    width: rs(130), marginRight: rs(12),
+    width: rs(130), marginRight: rs(12), borderWidth: 2,
     borderRadius: rs(12), overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.glassBorder, ...SHADOW.dark,
   },
   posterCardInner: { borderRadius: rs(11), overflow: 'hidden', backgroundColor: COLORS.bg2 },
-  posterImg:       { width: '100%', height: rs(175) },
+  posterImg: { width: '100%', height: rs(175) },
   posterInfo: { paddingHorizontal: rs(8), paddingVertical: rs(8), overflow: 'hidden' },
   posterTitle: {
     color: COLORS.text, fontSize: rs(11), fontWeight: '700',
@@ -1294,12 +1406,12 @@ const S = StyleSheet.create({
 
   // Genre / category card
   genreCard: {
-    width: rs(120), marginRight: rs(12),
+    width: rs(130), marginRight: rs(12),
     borderRadius: rs(12), overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.glassBorder, ...SHADOW.dark,
   },
   genreCardInner: { borderRadius: rs(11), overflow: 'hidden', backgroundColor: COLORS.bg2 },
-  genreImg:       { width: '100%', height: rs(165) },
-  genreInfo:      { paddingHorizontal: rs(8), paddingVertical: rs(8), overflow: 'hidden' },
-  genreTitle:     { color: COLORS.text, fontSize: rs(11), fontWeight: '700', lineHeight: rs(15) },
+  genreImg: { width: '100%', height: rs(165) },
+  genreInfo: { paddingHorizontal: rs(8), paddingVertical: rs(8), overflow: 'hidden' },
+  genreTitle: { color: COLORS.text, fontSize: rs(11), fontWeight: '700', lineHeight: rs(15) },
 });
