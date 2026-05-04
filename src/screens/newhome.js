@@ -1,5 +1,15 @@
 // src/screens/HomeScreen.js
 /**
+
+// In HomeScreen, replace the boot useEffect with this:
+useEffect(() => {
+  StatusBar.setHidden(true, 'fade');
+  startShimmer();
+  loadData();                          // ← fires immediately
+  return () => StatusBar.setHidden(false, 'fade');
+}, []);
+
+
  * PERFORMANCE FIXES APPLIED:
  * 1. Single shared Animated.Value for ALL skeleton boxes (eliminates 500+ pending callbacks)
  * 2. Skeleton renders only once — shimmer driven by one loop at the top level
