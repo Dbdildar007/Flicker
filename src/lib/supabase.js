@@ -87,6 +87,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   global: { fetch: (...args) => fetch(...args) },
 });
 
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT' || !session) return; 
+});
+
 //export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   //auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true },
   // Tune realtime + fetch timeout
