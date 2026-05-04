@@ -3,14 +3,95 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL  = 'https://cxbmopvqjmtnfiheqtob.supabase.co';
+//const SUPABASE_URL  = 'https://cxbmopvqjmtnfiheqtob.supabase.co';
+//const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4Ym1vcHZxam10bmZpaGVxdG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNjQzNjEsImV4cCI6MjA4Nzg0MDM2MX0.rVR2zu3RdBkBW19mrhusDoRPrprpJLJSvkBHQ4kFyK4';
+
+
+// src/lib/supabase.js
+
+//import { createClient } from '@supabase/supabase-js';
+//import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ── Chunked storage adapter ──────────────────────────────────────────────────
+// AsyncStorage silently fails when a single value exceeds ~2MB or ~18k properties.
+// This adapter splits large values into 1KB chunks on write and reassembles on read.
+const CHUNK_SIZE = 900; // characters per chunk (safe under AsyncStorage limits)
+
+const ChunkedStorage = {
+  async getItem(key) {
+    try {
+      // First try reading as a plain value
+      const plain = await AsyncStorage.getItem(key);
+      if (plain !== null) {
+        // Check if it's a chunked value
+        if (plain.startsWith('__CHUNKED__')) {
+          const count = parseInt(plain.replace('__CHUNKED__', ''), 10);
+          const keys  = Array.from({ length: count }, (_, i) => `${key}__chunk_${i}`);
+          const pairs = await AsyncStorage.multiGet(keys);
+          return pairs.map(([, v]) => v || '').join('');
+        }
+        return plain;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async setItem(key, value) {
+    try {
+      if (value.length <= CHUNK_SIZE) {
+        // Small enough — store directly, clean up any old chunks
+        await AsyncStorage.setItem(key, value);
+        return;
+      }
+      // Split into chunks
+      const chunks = [];
+      for (let i = 0; i < value.length; i += CHUNK_SIZE) {
+        chunks.push(value.slice(i, i + CHUNK_SIZE));
+      }
+      const pairs = chunks.map((chunk, i) => [`${key}__chunk_${i}`, chunk]);
+      await AsyncStorage.multiSet(pairs);
+      // Store a manifest so getItem knows how many chunks to read
+      await AsyncStorage.setItem(key, `__CHUNKED__${chunks.length}`);
+    } catch (e) {
+      console.warn('[ChunkedStorage.setItem]', e.message);
+    }
+  },
+
+  async removeItem(key) {
+    try {
+      const plain = await AsyncStorage.getItem(key);
+      if (plain?.startsWith('__CHUNKED__')) {
+        const count = parseInt(plain.replace('__CHUNKED__', ''), 10);
+        const keys  = Array.from({ length: count }, (_, i) => `${key}__chunk_${i}`);
+        await AsyncStorage.multiRemove(keys);
+      }
+      await AsyncStorage.removeItem(key);
+    } catch (e) {
+      console.warn('[ChunkedStorage.removeItem]', e.message);
+    }
+  },
+};
+
+const SUPABASE_URL = 'https://cxbmopvqjmtnfiheqtob.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4Ym1vcHZxam10bmZpaGVxdG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNjQzNjEsImV4cCI6MjA4Nzg0MDM2MX0.rVR2zu3RdBkBW19mrhusDoRPrprpJLJSvkBHQ4kFyK4';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true },
-  // Tune realtime + fetch timeout
+  auth: {
+    storage:         ChunkedStorage,  // ← replaces AsyncStorage directly
+    autoRefreshToken: true,
+    persistSession:   true,
+    detectSessionInUrl: false,        // ← add this for React Native
+  },
   global: { fetch: (...args) => fetch(...args) },
 });
+
+//export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  //auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true },
+  // Tune realtime + fetch timeout
+  //global: { fetch: (...args) => fetch(...args) },
+//});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const handle = (data, error, fallback = []) => {
