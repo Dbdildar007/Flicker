@@ -469,10 +469,21 @@ function MoviesStack() {
 
 // ── Main tabs ──────────────────────────────────────────────────────────────────
 function MainTabs() {
+
+  // At the top of MainTabs()
+const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+useEffect(() => {
+  const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+  const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+  return () => { show.remove(); hide.remove(); };
+}, []);
+  
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Tab.Navigator
-        tabBar={(props) => <CustomTabBar {...props} />}
+        //tabBar={(props) => <CustomTabBar {...props} />}
+        tabBar={(props) => keyboardVisible ? null : <CustomTabBar {...props} />}
         screenOptions={{
           headerShown: false,
           lazy: false,         // pre-mount all screens — instant tab switching
