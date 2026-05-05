@@ -706,39 +706,42 @@ export default function FriendsScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />}>
 
           {/* ── Pending Requests ──────────────────────────────────────────── */}
-          <View style={styles.sectionWrap}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Friend Requests</Text>
-              {pendingRequests.length > 0 && (
-                <TouchableOpacity onPress={() => setShowSeeAll(true)} style={styles.seeAllBtn}>
-                  <LinearGradient colors={[C.accentDim, 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} borderRadius={20} />
-                  <Text style={styles.seeAllText}>See All ({pendingRequests.length})</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+         {/* ── Pending Requests ──────────────────────────────────────────── */}
+{(pendingLoading || pendingRequests.length > 0) && (
+  <View style={styles.sectionWrap}>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>Friend Requests</Text>
+      {pendingRequests.length > 0 && (
+        <TouchableOpacity onPress={() => setShowSeeAll(true)} style={styles.seeAllBtn}>
+          <LinearGradient 
+            colors={[C.accentDim, 'transparent']} 
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} 
+            style={StyleSheet.absoluteFill} 
+            borderRadius={20} 
+          />
+          <Text style={styles.seeAllText}>See All ({pendingRequests.length})</Text>
+        </TouchableOpacity>
+      )}
+    </View>
 
-            {pendingLoading ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 18, gap: 12 }}>
-                {[0, 1].map(i => <RequestCardShimmer key={i} />)}
-              </ScrollView>
-            ) : pendingRequests.length === 0 ? (
-              <GlassCard style={styles.emptyCard}>
-                <Text style={styles.emptyText}>✨ No pending requests</Text>
-              </GlassCard>
-            ) : (
-              <FlatList
-                data={pendingRequests}
-                renderItem={renderRequestCard}
-                keyExtractor={i => i.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingLeft: 18, paddingRight: 6, gap: 12 }}
-                snapToInterval={CARD_W + 12}
-                decelerationRate="fast"
-              />
-            )}
-          </View>
-
+    {pendingLoading ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 18, gap: 12 }}>
+        {[0, 1].map(i => <RequestCardShimmer key={i} />)}
+      </ScrollView>
+    ) : (
+      <FlatList
+        data={pendingRequests}
+        renderItem={renderRequestCard}
+        keyExtractor={i => i.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingLeft: 18, paddingRight: 6, gap: 12 }}
+        snapToInterval={CARD_W + 12}
+        decelerationRate="fast"
+      />
+    )}
+  </View>
+)}
           {/* ── Connected Friends ─────────────────────────────────────────── */}
           <View style={styles.sectionWrap}>
             <View style={styles.sectionHeader}>
