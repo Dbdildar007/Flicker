@@ -348,6 +348,9 @@ export default function FriendsScreen({ navigation }) {
   const [pendingMap, setPendingMap] = useState({});
   const [actionLoading, setActionLoading] = useState({});
 
+  const [isLoggedIn, setIsLoggedIn] = useState(false); 
+  const [authLoading, setAuthLoading] = useState(true);
+
   // ─ Animations
   const searchBarScale = useRef(new Animated.Value(1)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -377,9 +380,19 @@ export default function FriendsScreen({ navigation }) {
     subscriptionRef.current = sub;
   };
 
-  const loadAll = async () => {
+  useEffect(() => {
+    // Simulate checking auth session
+    setTimeout(() => {
+      // Set to false to see the new UI, true to see the friends list
+      setIsLoggedIn(false); 
+      setAuthLoading(false);
+    }, 1500);
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    if (!isLoggedIn) return;
     await Promise.all([loadPending(), loadFriends()]);
-  };
+  }, [isLoggedIn]);
 
   const loadPending = async () => {
     if (!currentUserId.current) return;
@@ -649,6 +662,65 @@ export default function FriendsScreen({ navigation }) {
     }
     return null;
   };
+
+if (authLoading) {
+    return (
+      <View style={[styles.root, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={C.accent} />
+      </View>
+    );
+  }
+if (!isLoggedIn) {
+    return (
+      <View style={styles.root}>
+        <StatusBar barStyle="light-content" />
+        <LinearGradient colors={['#070d1a', '#0a1128', '#070d1a']} style={StyleSheet.absoluteFill} />
+        
+        {/* Decorative 3D Floating Orbs in background */}
+        <View style={styles.orb1} />
+        <View style={styles.orb2} />
+
+        <View style={styles.authContainer}>
+          <GlassCard style={styles.authGlassCard}>
+            <View style={styles.authIconCircle}>
+              <Text style={styles.authEmoji}>🌐</Text>
+            </View>
+            
+            <Text style={styles.authTitle}>Join the Network</Text>
+            <Text style={styles.authSubtitle}>
+              Connect with explorers worldwide, share your journey, and build your circle in the digital frontier.
+            </Text>
+
+            <View style={styles.authActionGap}>
+              <TouchableOpacity style={styles.googleBtn} activeOpacity={0.8}>
+                <LinearGradient 
+                  colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.05)']} 
+                  style={styles.authBtnGradient}
+                >
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
+                <Text style={styles.emailBtnText}>Continue with Email</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.createBtn} onPress={() => setIsLoggedIn(true)}>
+                <Text style={styles.createBtnText}>
+                  New here? <Text style={{color: C.accent}}>Create an account</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+          
+          <Text style={styles.authFooterText}>
+            By continuing, you agree to our Terms of Service.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -971,4 +1043,105 @@ const styles = StyleSheet.create({
   },
   exploreFollowText: { color: C.bg, fontSize: 12, fontWeight: '800' },
   exploreCancelBtn: { backgroundColor: C.dangerDim, borderWidth: 1, borderColor: C.danger, shadowOpacity: 0 },
+  // AUTH STYLES
+  authContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 10,
+  },
+  authGlassCard: {
+    padding: 32,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)', // Thin glass
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: C.accent,
+    shadowOpacity: 0.2,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  authIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 255, 198, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: C.accentDim,
+  },
+  authEmoji: { fontSize: 32 },
+  authTitle: {
+    color: C.white,
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  authSubtitle: {
+    color: C.grey,
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 10,
+  },
+  authActionGap: { width: '100%', gap: 16 },
+  googleBtn: {
+    width: '100%',
+    height: 54,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  authBtnGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  googleBtnText: { color: C.white, fontWeight: '700', fontSize: 16 },
+  emailBtn: {
+    width: '100%',
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: C.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: C.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  emailBtnText: { color: C.bg, fontWeight: '800', fontSize: 16 },
+  createBtn: { marginTop: 12, alignItems: 'center' },
+  createBtnText: { color: C.grey, fontSize: 14, fontWeight: '600' },
+  authFooterText: {
+    color: 'rgba(138, 155, 181, 0.5)',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 24,
+  },
+  // Floating Orbs
+  orb1: {
+    position: 'absolute',
+    top: '15%',
+    right: '-10%',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: C.accent,
+    opacity: 0.05,
+  },
+  orb2: {
+    position: 'absolute',
+    bottom: '10%',
+    left: '-20%',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: C.purple,
+    opacity: 0.05,
 });
