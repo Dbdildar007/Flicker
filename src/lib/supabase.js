@@ -370,6 +370,133 @@ export const isInWatchlist = async (userId, movieId) => {
   return !!data;
 };
 
+// friends api calls
+
+// ─── SEARCH & EXPLORE ────────────────────────────────────────────────────────
+
+export const searchUsers = async ({ query, page = 0, pageSize = 10 }) => {
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  let request = supabase
+    .from('profiles')
+    .select('user_id, display_name, avatar_url, unique_id, is_online, last_seen')
+    .order('is_online', { ascending: false })
+    .range(from, to);
+
+  if (query) {
+    request = request.or(`display_name.ilike.%${query}%,unique_id.ilike.%${query}%`);
+  }
+
+  return await request;
+};
+
+// ─── FRIENDSHIP LOGIC ────────────────────────────────────────────────────────
+
+/**
+ * Fetches requests where current user is the 'addressee'
+ */
+export const fetchPendingRequests = async (userId) => {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select(`
+      id,
+      requester_id,
+      requester:profiles!friendships_requester_id_fkey (
+        user_id, display_name, avatar_url, unique_id, is_online
+      )
+    `)
+    .eq('addressee_id', userId)
+    .eq('status', 'pending');
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Fetches accepted friends. We check both directions in the friendship table.
+ */
+export const fetchConnectedFriends = async (userId) => {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select(`
+      status,
+      requester:profiles!friendships_requester_id_fkey (user_id, display_name, avatar_url, unique_id, is_online, last_seen),
+      addressee:profiles!friendships_addressee_id_fkey (user_id, display_name, avatar_url, unique_id, is_online, last_seen)
+    `)
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+    .eq('status', 'accepted');
+
+  if (error) throw error;
+
+  // Flatten the result to return the "other" person's profile
+  return data.map(rel => (rel.requester.user_id === userId ? rel.addressee : rel.requester));
+};
+
+export const sendFriendRequest = async (requesterId, addresseeId) => {
+  return await supabase
+    .from('friendships')
+    .insert([{ requester_id: requesterId, addressee_id: addresseeId, status: 'pending' }]);
+};
+
+export const acceptFriendRequest = async (requestId) => {
+  return await supabase
+    .from('friendships')
+    .update({ status: 'accepted' })
+    .eq('id', requestId);
+};
+
+export const rejectFriendRequest = async (requestId) => {
+  return await supabase.from('friendships').delete().eq('id', requestId);
+};
+
+export const cancelFriendRequest = async (requesterId, addresseeId) => {
+  return await supabase
+    .from('friendships')
+    .delete()
+    .eq('requester_id', requesterId)
+    .eq('addressee_id', addresseeId);
+};
+
+// ─── SUBSCRIPTIONS (REAL-TIME) ───────────────────────────────────────────────
+
+export const subscribeToFriendships = (userId, callback) => {
+  return supabase
+    .channel('friendship_changes')
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'friendships',
+      filter: `or(requester_id.eq.${userId},addressee_id.eq.${userId})` 
+    }, callback)
+    .subscribe();
+};
+
+// ─── SEARCH HISTORY (LOCAL STORAGE FALLBACK) ─────────────────────────────────
+// Note: Usually handled via AsyncStorage for better performance
+//import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export const fetchSearchHistory = async () => {
+  const history = await AsyncStorage.getItem('search_history');
+  return history ? JSON.parse(history) : [];
+};
+
+export const saveSearchHistory = async (user) => {
+  let history = await fetchSearchHistory();
+  history = [user, ...history.filter(h => h.user_id !== user.user_id)].slice(0, 10);
+  await AsyncStorage.setItem('search_history', JSON.stringify(history));
+};
+
+export const clearSearchHistory = async () => {
+  await AsyncStorage.removeItem('search_history');
+};
+
+export const removeSearchHistoryItem = async (userId) => {
+  let history = await fetchSearchHistory();
+  history = history.filter(h => h.user_id !== userId);
+  await AsyncStorage.setItem('search_history', JSON.stringify(history));
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ── CONTENT MAP HELPER ────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
