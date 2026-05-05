@@ -394,6 +394,13 @@ export default function FriendsScreen({ navigation }) {
     }, 1500);
   }, []);
 
+  // Add this below your other useEffects
+useEffect(() => {
+  if (!friendsLoading && connectedFriends.length === 0) {
+    setActiveTab('circle');
+  }
+}, [connectedFriends, friendsLoading]);
+
   const loadAll = useCallback(async () => {
     if (!isLoggedIn) return;
     await Promise.all([loadPending(), loadFriends()]);
@@ -843,27 +850,38 @@ if (!isLoggedIn) {
   </View>
 )}
    {/* ── 3D HYPED TAB BAR ── */}
-          <View style={styles.tabContainer}>
-            <View style={styles.tabWrapper}>
-              <TouchableOpacity 
-                style={[styles.tabBtn, activeTab === 'active' && styles.tabBtnActive]} 
-                onPress={() => setActiveTab('active')}
-              >
-                <View style={[styles.statusDot, { backgroundColor: C.online, marginRight: 8 }]} />
-                <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
-                  {sortedFriends.filter(f => f.is_online).length}/{connectedFriends.length} Online
-                </Text>
-              </TouchableOpacity>
+{!friendsLoading && (
+  <View style={styles.tabContainer}>
+    <View style={styles.tabWrapper}>
+      {/* If friends exist, show the Online count tab */}
+      {connectedFriends.length > 0 && (
+        <TouchableOpacity 
+          style={[styles.tabBtn, activeTab === 'active' && styles.tabBtnActive]} 
+          onPress={() => setActiveTab('active')}
+        >
+          <View style={[styles.statusDot, { backgroundColor: C.online, marginRight: 8 }]} />
+          <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
+            {sortedFriends.filter(f => f.is_online).length}/{connectedFriends.length} Online
+          </Text>
+        </TouchableOpacity>
+      )}
 
-              <TouchableOpacity 
-                style={[styles.tabBtn, activeTab === 'circle' && styles.tabBtnActive]} 
-                onPress={() => setActiveTab('circle')}
-              >
-                <Text style={[styles.tabText, activeTab === 'circle' && styles.tabTextActive]}>My Circle</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
+      {/* Circle / Connect Tab */}
+      <TouchableOpacity 
+        style={[
+          styles.tabBtn, 
+          activeTab === 'circle' && styles.tabBtnActive,
+          connectedFriends.length === 0 && { flex: 1 } // Spans full width if no friends
+        ]} 
+        onPress={() => setActiveTab('circle')}
+      >
+        <Text style={[styles.tabText, activeTab === 'circle' && styles.tabTextActive]}>
+          {connectedFriends.length === 0 ? "Find Explorers" : "My Circle"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
           {/* ── DYNAMIC CONTENT AREA ── */}
           <View style={{ paddingHorizontal: 18 }}>
             {friendsLoading ? (
@@ -878,15 +896,28 @@ if (!isLoggedIn) {
               </View>
             ) : (
               // TAB 2: My Circle (2-Column Production Grid)
-              <FlatList
-                data={sortedFriends}
-                renderItem={renderCircleItem}
-                keyExtractor={i => i.user_id}
-                numColumns={2}
-                scrollEnabled={false} // Managed by outer ScrollView
-                columnWrapperStyle={{ gap: 14, marginBottom: 14 }}
-                ListEmptyComponent={<Text style={styles.emptyText}>Your circle is empty. Start exploring!</Text>}
-              />
+             {/* TAB 2: My Circle Grid */}
+<FlatList
+  data={sortedFriends}
+  renderItem={renderCircleItem}
+  keyExtractor={i => i.user_id}
+  numColumns={2}
+  scrollEnabled={false}
+  columnWrapperStyle={{ gap: 14, marginBottom: 14 }}
+  ListEmptyComponent={
+    <GlassCard style={styles.emptyGridCard}>
+      <Text style={styles.authEmoji}>🌌</Text>
+      <Text style={styles.emptyTitle}>Your Galaxy is Quiet</Text>
+      <Text style={styles.emptyText}>Start following people to build your circle.</Text>
+      <TouchableOpacity 
+        style={styles.exploreBtn} 
+        onPress={() => setShowSeeAll(true)}
+      >
+        <Text style={styles.exploreBtnText}>Explore Now</Text>
+      </TouchableOpacity>
+    </GlassCard>
+  }
+/>
             )}
           </View>
 
@@ -1266,6 +1297,23 @@ const styles = StyleSheet.create({
     shadowColor: C.accent,
     shadowOpacity: 0.4,
     shadowRadius: 8,
+  },emptyGridCard: {
+    marginTop: 20,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    color: C.white,
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 12,
+  },
+  exploreBtnText: {
+    color: C.accent,
+    fontWeight: '700',
+    fontSize: 14,
   },
   circleMsgText: {
     color: C.bg,
