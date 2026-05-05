@@ -464,14 +464,14 @@ export default function SearchScreen({ navigation }) {
     });
 
     if (err) {
-      setError('Search failed. Please try again.');
-    } else {
-      if (pg === 0) setResults(data);
-      else setResults(prev => [...prev, ...data]);
-      setHasMore(more);
-      setPage(pg + 1);
-      if (hasQuery && pg === 0) addToHistory(q.trim());
-    }
+  setError('Search failed. Please try again.');
+} else {
+  if (pg === 0) setResults(data);
+  else setResults(prev => [...prev, ...data]);
+  setHasMore(more);
+  setPage(pg + 1);
+  // History is now handled only by the Keyboard 'Search' button
+}
 
     setSearching(false);
     setLoadingMore(false);
