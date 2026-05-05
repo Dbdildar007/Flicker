@@ -350,6 +350,7 @@ export default function FriendsScreen({ navigation }) {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [authLoading, setAuthLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('active');
 
   // ─ Animations
   const searchBarScale = useRef(new Animated.Value(1)).current;
@@ -365,11 +366,15 @@ export default function FriendsScreen({ navigation }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
           currentUserId.current = session.user.id;
+          setIsLoggedIn(true);
           loadAll();
           loadSearchHistory();
           setupSubscriptions();
         }
-      } catch (e) { console.warn(e); }
+        setAuthLoading(false);
+      } catch (e) {
+        setAuthLoading(false);
+        console.warn(e); }
     })();
     return () => { subscriptionRef.current?.unsubscribe(); };
   }, []);
@@ -722,6 +727,29 @@ if (!isLoggedIn) {
   }
 
 
+// ─── Render Circle Grid Item (2 Columns) ──────────────────────────────────
+  const renderCircleItem = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.circleCard} 
+      activeOpacity={0.9}
+      onPress={() => setSelectedProfile({ ...item, isFriend: true })}
+    >
+      <LinearGradient
+        colors={['rgba(255,255,255,0.05)', 'rgba(0,255,198,0.03)']}
+        style={StyleSheet.absoluteFill}
+        borderRadius={24}
+      />
+      <Avatar url={item.avatar_url} size={58} online={item.is_online} style={{ marginBottom: 12 }} />
+      <Text style={styles.circleName} numberOfLines={1}>{item.display_name || 'Explorer'}</Text>
+      <Text style={styles.circleHandle}>@{item.unique_id || 'user'}</Text>
+      
+      <TouchableOpacity style={styles.circleMsgBtn} onPress={() => handleMessage(item)}>
+        <Text style={styles.circleMsgText}>Message</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
@@ -814,33 +842,51 @@ if (!isLoggedIn) {
     )}
   </View>
 )}
-          {/* ── Connected Friends ─────────────────────────────────────────── */}
-          <View style={styles.sectionWrap}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Connected Friends</Text>
-              <View style={styles.onlineBadge}>
-                <View style={[styles.statusDot, { backgroundColor: C.online, marginRight: 5 }]} />
-                <Text style={{ color: C.accent, fontSize: 12, fontWeight: '600' }}>
-                  {sortedFriends.filter(f => f.is_online).length} online
+   {/* ── 3D HYPED TAB BAR ── */}
+          <View style={styles.tabContainer}>
+            <View style={styles.tabWrapper}>
+              <TouchableOpacity 
+                style={[styles.tabBtn, activeTab === 'active' && styles.tabBtnActive]} 
+                onPress={() => setActiveTab('active')}
+              >
+                <View style={[styles.statusDot, { backgroundColor: C.online, marginRight: 8 }]} />
+                <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
+                  {sortedFriends.filter(f => f.is_online).length}/{connectedFriends.length} Online
                 </Text>
-              </View>
-            </View>
+              </TouchableOpacity>
 
+              <TouchableOpacity 
+                style={[styles.tabBtn, activeTab === 'circle' && styles.tabBtnActive]} 
+                onPress={() => setActiveTab('circle')}
+              >
+                <Text style={[styles.tabText, activeTab === 'circle' && styles.tabTextActive]}>My Circle</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── DYNAMIC CONTENT AREA ── */}
+          <View style={{ paddingHorizontal: 18 }}>
             {friendsLoading ? (
-              <View style={{ paddingHorizontal: 18 }}>
-                {[0, 1, 2].map(i => <FriendRowShimmer key={i} />)}
+              [0, 1, 2,3].map(i => <FriendRowShimmer key={i} />)
+            ) : activeTab === 'active' ? (
+              // TAB 1: Online Only (Vertical List)
+              <View style={{ gap: 12 }}>
+                {sortedFriends.filter(f => f.is_online).map(f => renderFriendRow({ item: f }))}
+                {sortedFriends.filter(f => f.is_online).length === 0 && (
+                    <Text style={styles.emptyText}>No friends online right now.</Text>
+                )}
               </View>
-            ) : sortedFriends.length === 0 ? (
-              <GlassCard style={[styles.emptyCard, { marginHorizontal: 18 }]}>
-                <Text style={styles.emptyText}>Connect with people to see them here</Text>
-                <TouchableOpacity style={styles.exploreBtn} onPress={() => setShowSeeAll(true)}>
-                  <Text style={{ color: C.accent, fontSize: 13, fontWeight: '600' }}>Explore People</Text>
-                </TouchableOpacity>
-              </GlassCard>
             ) : (
-              <View style={{ paddingHorizontal: 14, gap: 10 }}>
-                {sortedFriends.map(f => renderFriendRow({ item: f }))}
-              </View>
+              // TAB 2: My Circle (2-Column Production Grid)
+              <FlatList
+                data={sortedFriends}
+                renderItem={renderCircleItem}
+                keyExtractor={i => i.user_id}
+                numColumns={2}
+                scrollEnabled={false} // Managed by outer ScrollView
+                columnWrapperStyle={{ gap: 14, marginBottom: 14 }}
+                ListEmptyComponent={<Text style={styles.emptyText}>Your circle is empty. Start exploring!</Text>}
+              />
             )}
           </View>
 
@@ -1144,4 +1190,85 @@ const styles = StyleSheet.create({
     borderRadius: 150,
     backgroundColor: C.purple,
     opacity: 0.05,
-});
+},
+  tabContainer: {
+    paddingHorizontal: 18,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  tabWrapper: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 20,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBtnActive: {
+    backgroundColor: 'rgba(0, 255, 198, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 198, 0.2)',
+    shadowColor: C.accent,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  tabText: {
+    color: C.grey,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tabTextActive: {
+    color: C.accent,
+  },
+
+  // Circle Grid Styles (2 Columns)
+  circleCard: {
+    flex: 1,
+    height: 200,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 255, 198, 0.15)',
+    backgroundColor: 'rgba(10, 24, 50, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  circleName: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  circleHandle: {
+    color: C.grey,
+    fontSize: 11,
+    marginBottom: 16,
+  },
+  circleMsgBtn: {
+    width: '100%',
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: C.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: C.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  circleMsgText: {
+    color: C.bg,
+    fontSize: 12,
+    fontWeight: '800',
+  });
