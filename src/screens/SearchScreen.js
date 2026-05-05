@@ -353,7 +353,6 @@ export default function SearchScreen({ navigation }) {
   const { H_PAD, GAP, CARD_W, CARD_H } = getLayout();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [query,       setQuery]       = useState('');
   const [results,     setResults]     = useState([]);
   const [defaultList, setDefaultList] = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -371,6 +370,8 @@ export default function SearchScreen({ navigation }) {
   const [selYears,    setSelYears]    = useState([]);
   const [selLangs,    setSelLangs]    = useState([]);
   const [selGenres,   setSelGenres]   = useState([]);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState(''); // Add this
 
   const debounceRef = useRef(null);
   const inputRef    = useRef(null);
@@ -477,16 +478,24 @@ export default function SearchScreen({ navigation }) {
   }, [addToHistory]);
 
   // ── Debounce: auto-search on query/filter change ───────────────────────────
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!isSearchMode) { setResults([]); return; }
-    debounceRef.current = setTimeout(() => {
-      setPage(0);
-      setHasMore(true);
-      performSearch(query, selYears, selLangs, selGenres, 0);
-    }, 200);
-    return () => clearTimeout(debounceRef.current);
-  }, [query, selYears, selLangs, selGenres]);
+// ── Debounce: Only update the search term string after typing pauses
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setDebouncedQuery(query);
+  }, 600); 
+  return () => clearTimeout(timer);
+}, [query]);
+
+// ── Search Trigger: Only runs when the debounced term or filters change
+useEffect(() => {
+  if (!isSearchMode) {
+    setResults([]);
+    return;
+  }
+  setPage(0);
+  setHasMore(true);
+  performSearch(query, selYears, selLangs, selGenres, 0);
+}, [debouncedQuery, selYears, selLangs, selGenres]);
 
   // ── Toggle filters ─────────────────────────────────────────────────────────
   const toggleYear  = useCallback(y => setSelYears(p  => p.includes(y) ? p.filter(x => x !== y) : [...p, y]),  []);
@@ -635,22 +644,27 @@ export default function SearchScreen({ navigation }) {
                   style={[StyleSheet.absoluteFill, { borderRadius: rs(26) }]}
                 />
                 <Text style={S.searchIcon}>🔍</Text>
-                <TextInput
-                  ref={inputRef}
-                  style={S.searchInput}
-                  placeholder="Search movies, series…"
-                  placeholderTextColor="rgba(255,255,255,0.42)"
-                  value={query}
-                  onChangeText={setQuery}
-                  returnKeyType="search"
-                  onSubmitEditing={() => {
-                    Keyboard.dismiss();
-                    if (query.trim()) addToHistory(query.trim());
-                  }}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                  selectionColor={COLORS.accent || '#00FFB2'}
-                />
+             <TextInput
+  ref={inputRef}
+  style={S.searchInput}
+  placeholder="Search movies, series…"
+  placeholderTextColor="rgba(255,255,255,0.42)"
+  value={query}
+  onChangeText={setQuery}
+  returnKeyType="search"
+  onSubmitEditing={() => {
+    Keyboard.dismiss();
+    if (query.trim().length > 0) {
+      // 1. Manually trigger the debounced state so search starts immediately
+      setDebouncedQuery(query.trim()); 
+      // 2. Only save to history here (the full sentence)
+      addToHistory(query.trim());
+    }
+  }}
+  autoCorrect={false}
+  autoCapitalize="none"
+  selectionColor={COLORS.accent || '#00FFB2'}
+/>
                 {query.length > 0 && (
                   <TouchableOpacity
                     onPress={() => setQuery('')}
