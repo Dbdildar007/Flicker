@@ -495,7 +495,7 @@ useEffect(() => {
   setPage(0);
   setHasMore(true);
   performSearch(query, selYears, selLangs, selGenres, 0);
-}, [debouncedQuery, selYears, selLangs, selGenres]);
+}, [debouncedQuery, selYears, selLangs, selGenres]); // Change 'query' to 'debouncedQuery'
 
   // ── Toggle filters ─────────────────────────────────────────────────────────
   const toggleYear  = useCallback(y => setSelYears(p  => p.includes(y) ? p.filter(x => x !== y) : [...p, y]),  []);
@@ -644,7 +644,7 @@ useEffect(() => {
                   style={[StyleSheet.absoluteFill, { borderRadius: rs(26) }]}
                 />
                 <Text style={S.searchIcon}>🔍</Text>
-             <TextInput
+ <TextInput
   ref={inputRef}
   style={S.searchInput}
   placeholder="Search movies, series…"
@@ -654,11 +654,12 @@ useEffect(() => {
   returnKeyType="search"
   onSubmitEditing={() => {
     Keyboard.dismiss();
-    if (query.trim().length > 0) {
-      // 1. Manually trigger the debounced state so search starts immediately
-      setDebouncedQuery(query.trim()); 
-      // 2. Only save to history here (the full sentence)
-      addToHistory(query.trim());
+    const cleanQuery = query.trim();
+    if (cleanQuery.length > 0) {
+      // 1. Force the search to start immediately without waiting for the timer
+      setDebouncedQuery(cleanQuery); 
+      // 2. Save only the full sentence/word to history
+      addToHistory(cleanQuery);
     }
   }}
   autoCorrect={false}
