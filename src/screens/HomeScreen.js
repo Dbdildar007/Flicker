@@ -16,17 +16,19 @@ import React, {
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Animated, Dimensions, StatusBar, ImageBackground,
-  ActivityIndicator, RefreshControl, InteractionManager,Image
+  ActivityIndicator, RefreshControl, InteractionManager, Image
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 import { COLORS, RADIUS, SHADOW } from '../data/theme';
+import {useNavigation} from '@react-navigation/native';
 import {
   fetchFeatured, fetchMoviesByPage,
   fetchUpcoming, fetchContinueWatching, fetchWatchlist,
   addToWatchlist, removeFromWatchlist, buildContentMap,
 } from '../lib/supabase';
+import { limitWords } from '../utils/helper';
 
 // ─── Dimensions & responsive scale ───────────────────────────────────────────
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -361,7 +363,7 @@ const IconBtn = memo(({ icon, onPress, badge }) => {
 // ─── Stylish Logo ──────────────────────────────────────────────────────────────
 const AppLogo = memo(() => (
   <View>
-   <Text style={{ fontSize: rs(28), fontWeight: 'bold' ,color:COLORS.text}}>DB</Text>
+    <Text style={{ fontSize: rs(28), fontWeight: 'bold', color: COLORS.text }}>F</Text>
   </View>
 ));
 
@@ -418,19 +420,15 @@ function AppHeader({ scrollY, navigation }) {
 }
 
 
-const limitWords = (text, limit = 18) => {
-  if (text.length <= limit) return text;
-  return text.slice(0, limit) + "...";
 
-};
 
 const limitWordsdes = (text, limit = 100) => {
- if (text.length <= limit) return text;
+  if (text.length <= limit) return text;
   return text.slice(0, limit) + "...";
 };
 
 // ─── HERO CAROUSEL ─────────────────────────────────────────────────────────────
-function HeroCarousel({ items, onAddList }) {
+function HeroCarousel({ navigation, items, onAddList }) {
   const [idx, setIdx] = useState(0);
   const fadeA = useRef(new Animated.Value(1)).current;
   const slideA = useRef(new Animated.Value(0)).current;
@@ -507,7 +505,9 @@ function HeroCarousel({ items, onAddList }) {
         <Text style={S.heroDesc} numberOfLines={2}>{limitWordsdes(item.description, 100)}</Text>
         <View style={S.heroBtnRow}>
           <GlassBtn accent icon="▶" label="Play Now"
-            onPress={() => { console.log('Play:', item.id); /* TODO: navigate Player */ }}
+            onPress={() => {
+              navigation.navigate('Player', { movieId: item.id });
+            }}
             style={{ marginRight: rs(12) }}
           />
           <GlassBtn icon="＋" label="My List" onPress={() => onAddList?.(item)} />
@@ -526,11 +526,11 @@ function HeroCarousel({ items, onAddList }) {
 }
 
 // ─── CONTINUE WATCHING CARD ────────────────────────────────────────────────────
-const ContinueCard = memo(({ item }) => {
+const ContinueCard = memo(({navigation, item }) => {
   const { anim, onIn, onOut } = usePressScale(0.95);
   return (
     <TouchableOpacity onPressIn={onIn} onPressOut={onOut} activeOpacity={1}
-      onPress={() => { console.log('Resume:', item.movieId); /* TODO: navigate Player resume */ }}>
+      onPress={() => { navigation.navigate('Player', { movieId: item.movieId }); }}>
       <Animated.View style={[S.contCard, { transform: [{ scale: anim }] }]}>
         <LinearGradient colors={[COLORS.glassBorder, 'rgba(0,255,178,0.05)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
         <View style={S.contInner}>
@@ -578,34 +578,42 @@ const ContinueCard = memo(({ item }) => {
 });
 
 // ─── WATCHLIST CARD ─────────────────────────────────────────────────────────────
-const WatchlistCard = memo(({ item, onRemove }) => {
+const WatchlistCard = memo(({navigation, item, onRemove }) => {
   const { anim, onIn, onOut } = usePressScale(0.95);
   return (
     <TouchableOpacity onPressIn={onIn} onPressOut={onOut} activeOpacity={1}
-      onPress={() => { console.log('WL:', item.id); /* TODO: navigate MovieDetail */ }}>
+      onPress={() => { navigation.navigate('MovieDetail', { movieId: item.id });}}>
       <Animated.View style={[S.posterCard, { transform: [{ scale: anim }] }]}>
         <LinearGradient colors={[COLORS.glassBorder, 'rgba(0,255,178,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
         <View style={S.posterInner}>
           {item.poster ? (
-            <ImageBackground source={{ uri: item.poster }} style={S.posterImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
-              <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.88)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
-              {item.is_series && <SeriesBadge />}
-              {item.is_trending && <TrendingBadge />}
-              {item.newly_added && <NewBadge label={item.newly_added} />}
-              <RatingChip rating={item.rating} />
-            </ImageBackground>) : (
-            <View style={[S.posterImg, { backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+            <>
+              <ImageBackground source={{ uri: item.poster }} style={S.posterImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
+                <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.88)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
+                {item.is_series && <SeriesBadge />}
+                {item.is_trending && <TrendingBadge />}
+                {item.newly_added && <NewBadge label={item.newly_added} />}
+                <RatingChip rating={item.rating} />
+              </ImageBackground>
+              <View style={S.posterInfo}>
+                <LinearGradient colors={['rgba(0,255,178,0.08)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
+                <Text style={S.posterTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
+                <TouchableOpacity onPress={() => onRemove?.(item)} style={S.removeBtn} activeOpacity={0.82}>
+                  <LinearGradient colors={[COLORS.accentGlow, 'rgba(0,255,178,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
+                  <Text style={S.removeTxt}>✓ In List</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <View style={[S.genreImg, { backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.04)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+              />
               <Text style={S.heroTitle}>{limitWords(item.title, 18)}</Text>
             </View>
           )}
-          <View style={S.posterInfo}>
-            <LinearGradient colors={['rgba(0,255,178,0.08)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
-            <Text style={S.posterTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
-            <TouchableOpacity onPress={() => onRemove?.(item)} style={S.removeBtn} activeOpacity={0.82}>
-              <LinearGradient colors={[COLORS.accentGlow, 'rgba(0,255,178,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
-              <Text style={S.removeTxt}>✓ In List</Text>
-            </TouchableOpacity>
-          </View>
+
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -613,29 +621,37 @@ const WatchlistCard = memo(({ item, onRemove }) => {
 });
 
 // ─── UPCOMING CARD ──────────────────────────────────────────────────────────────
-const UpcomingCard = memo(({ item }) => {
+const UpcomingCard = memo(({ navigation, item }) => {
   const { anim, onIn, onOut } = usePressScale(0.95);
   return (
     <TouchableOpacity onPressIn={onIn} onPressOut={onOut} activeOpacity={1}
-      onPress={() => { console.log('Upcoming:', item.id); /* TODO: navigate ComingSoon */ }}>
+      onPress={() => { navigation.navigate('MovieDetail', { movieId: item.id }); }}>
       <Animated.View style={[S.posterCard, { transform: [{ scale: anim }] }]}>
         <LinearGradient colors={[COLORS.glassBorder, 'rgba(0,255,178,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
         <View style={S.posterInner}>
           {item.poster ? (
-            <ImageBackground source={{ uri: item.poster }} style={S.posterImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
-              <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.85)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
-              {item.is_series && <SeriesBadge />}
-              <NotifBtn movieId={item.id} />
-              {item.release_date && <CountdownChip releaseDate={item.release_date} />}
-            </ImageBackground>) : (
-            <View style={[S.posterImg, { backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+            // ✅ Show ImageBackground + genreInfo only if poster exists
+            <>
+              <ImageBackground source={{ uri: item.poster }} style={S.posterImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
+                <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.85)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
+                {item.is_series && <SeriesBadge />}
+                <NotifBtn movieId={item.id} />
+                {item.release_date && <CountdownChip releaseDate={item.release_date} />}
+              </ImageBackground>
+              <View style={S.posterInfo}>
+                <LinearGradient colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
+                <Text style={S.posterTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
+              </View>
+            </>) : (
+            <View style={[S.genreImg, { backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.04)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+              />
               <Text style={S.heroTitle}>{limitWords(item.title, 18)}</Text>
             </View>
           )}
-          <View style={S.posterInfo}>
-            <LinearGradient colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
-            <Text style={S.posterTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
-          </View>
+
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -644,34 +660,51 @@ const UpcomingCard = memo(({ item }) => {
 
 // ─── MOVIE CARD ─────────────────────────────────────────────────────────────────
 const MovieCard = memo(({ item, onAddList }) => {
+  const navigation = useNavigation();
   const { anim, onIn, onOut } = usePressScale(0.94);
   return (
     <TouchableOpacity onPressIn={onIn} onPressOut={onOut} activeOpacity={1}
-      onPress={() => { console.log('Movie:', item.id); /* TODO: navigate MovieDetail zoom_from_card */ }}>
+      onPress={() => { navigation.navigate('MovieDetail', { movieId: item.id }); }}>
       <Animated.View style={[S.genreCard, { transform: [{ scale: anim }] }]}>
         <LinearGradient colors={[COLORS.glassBorder, 'rgba(0,255,178,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
         <View style={S.genreInner}>
           {item.poster ? (
-            <ImageBackground source={{ uri: item.poster }} style={S.genreImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
-              <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.90)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
-              {item.is_series && <SeriesBadge />}
-              {item.is_trending && <TrendingBadge />}
-              {item.newly_added && <NewBadge label={item.newly_added} />}
-              <RatingChip rating={item.rating} />
-              <TouchableOpacity onPress={() => onAddList?.(item)} style={S.addPill} activeOpacity={0.82}>
-                <LinearGradient colors={['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.08)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
-                <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
-                <Text style={S.addTxt}>+ List</Text>
-              </TouchableOpacity>
-            </ImageBackground>) : (
-            <View style={[S.genreImg, { backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+            // ✅ Show ImageBackground + genreInfo only if poster exists
+            <>
+              <ImageBackground source={{ uri: item.poster }} style={S.genreImg} imageStyle={{ borderTopLeftRadius: rs(10), borderTopRightRadius: rs(10) }}>
+                <LinearGradient
+                  colors={['rgba(242, 185, 185, 0.1)', 'rgba(255,255,255,0.0)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 0.35 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+                />
+                <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(181, 211, 203, 0.1)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(10) }]} />
+                {item.is_series && <SeriesBadge />}
+                {item.is_trending && <TrendingBadge />}
+                {item.newly_added && <NewBadge label={item.newly_added} />}
+                <RatingChip rating={item.rating} />
+                <TouchableOpacity onPress={() => onAddList?.(item)} style={S.addPill} activeOpacity={0.82}>
+                  <LinearGradient colors={['rgba(0,255,178,0.22)', 'rgba(0,255,178,0.08)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
+                  <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]} />
+                  <Text style={S.addTxt}>+ List</Text>
+                </TouchableOpacity>
+              </ImageBackground>
+
+              <View style={S.genreInfo}>
+                <LinearGradient colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
+                <Text style={S.genreTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={[S.genreImg, { backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderRadius: rs(10) }]}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.04)']}
+                style={[StyleSheet.absoluteFill, { borderRadius: rs(12) }]}
+              />
               <Text style={S.heroTitle}>{limitWords(item.title, 18)}</Text>
             </View>
           )}
-          <View style={S.genreInfo}>
-            <LinearGradient colors={['rgba(0,255,178,0.07)', 'rgba(3,15,12,0.5)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(10), borderBottomRightRadius: rs(10) }]} />
-            <Text style={S.genreTitle} numberOfLines={1}>{limitWords(item.title, 18)}</Text>
-          </View>
+
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -680,6 +713,7 @@ const MovieCard = memo(({ item, onAddList }) => {
 
 // ─── Content Row ───────────────────────────────────────────────────────────────
 const ContentRow = memo(({ title, data, onSeeAll, onAddList }) => {
+
   if (!data?.length) return null;
   return (
     <View style={S.section}>
@@ -738,12 +772,12 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   // ── Boot: skeleton for 800ms minimum, then load ───────────────────────────
- useEffect(() => {
-  StatusBar.setHidden(true, 'fade');
-  startShimmer();
-  loadData();                          // ← fires immediately
-  return () => StatusBar.setHidden(false, 'fade');
-}, []);
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    startShimmer();
+    loadData();                          // ← fires immediately
+    return () => StatusBar.setHidden(false, 'fade');
+  }, []);
 
 
 
@@ -757,7 +791,7 @@ export default function HomeScreen({ navigation }) {
     }
   }, [loadingInitial]);
 
-  
+
 
   // ── Data load ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async (isRefresh = false) => {
@@ -792,7 +826,6 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
- 
   // ── Pagination ────────────────────────────────────────────────────────────
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -809,10 +842,6 @@ export default function HomeScreen({ navigation }) {
     } finally { setLoadingMore(false); }
   }, [page, loadingMore, hasMore]);
 
-  // ── Refresh ───────────────────────────────────────────────────────────────
-  const onRefresh = useCallback(() => {
-    setRefreshing(true); setPage(0); setHasMore(true); loadData(true);
-  }, [loadData]);
 
   // ── Watchlist ops ─────────────────────────────────────────────────────────
   const handleAdd = useCallback(async (movie) => {
@@ -863,18 +892,10 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={onScroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing} onRefresh={onRefresh}
-            tintColor={COLORS.accent}
-            colors={[COLORS.accent, COLORS.accentDim]}
-            progressBackgroundColor={COLORS.bg2}
-          />
-        }
       >
         <Animated.View style={{ opacity: entryOpac, transform: [{ translateY: entryY }] }}>
 
-          {featured.length > 0 && <HeroCarousel items={featured} onAddList={handleAdd} />}
+          {featured.length > 0 && <HeroCarousel navigation={navigation} items={featured} onAddList={handleAdd} />}
 
           {/* API error banner — shown on UI not console */}
           {apiError ? <ErrorBanner message={apiError} onRetry={loadData} /> : null}
@@ -887,7 +908,7 @@ export default function HomeScreen({ navigation }) {
                 showsHorizontalScrollIndicator={false} contentContainerStyle={S.hPad}
                 initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} removeClippedSubviews
                 getItemLayout={(_, i) => ({ length: CONT_CARD_W, offset: CONT_CARD_W * i, index: i })}
-                renderItem={({ item }) => <ContinueCard item={item} />}
+                renderItem={({ item }) => <ContinueCard navigation={navigation} item={item} />}
               />
             </View>
           )}
@@ -900,7 +921,7 @@ export default function HomeScreen({ navigation }) {
                 showsHorizontalScrollIndicator={false} contentContainerStyle={S.hPad}
                 initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} removeClippedSubviews
                 getItemLayout={(_, i) => ({ length: POSTER_W, offset: POSTER_W * i, index: i })}
-                renderItem={({ item }) => <WatchlistCard item={item} onRemove={handleRemove} />}
+                renderItem={({ item }) => <WatchlistCard navigation={navigation} item={item} onRemove={handleRemove} />}
               />
             </View>
           )}
@@ -913,7 +934,7 @@ export default function HomeScreen({ navigation }) {
                 showsHorizontalScrollIndicator={false} contentContainerStyle={S.hPad}
                 initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} removeClippedSubviews
                 getItemLayout={(_, i) => ({ length: POSTER_W, offset: POSTER_W * i, index: i })}
-                renderItem={({ item }) => <UpcomingCard item={item} />}
+                renderItem={({ item }) => <UpcomingCard navigation={navigation} item={item} />}
               />
             </View>
           )}
@@ -952,7 +973,7 @@ export default function HomeScreen({ navigation }) {
 // ─── STYLES ────────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { flex: 1,marginTop:30 },
+  scroll: { flex: 1, marginTop: 30 },
   skelWrap: { flex: 1, backgroundColor: COLORS.bg },
 
   // Header
@@ -1050,7 +1071,7 @@ const S = StyleSheet.create({
   heroBadgeTxt: { color: COLORS.bg, fontSize: rs(9), fontWeight: '900', letterSpacing: 1 },
   heroMeta: { color: COLORS.textSub, fontSize: rs(11), marginRight: rs(4) },
   heroTitle: {
-    color: COLORS.text, fontSize: rs(32), fontWeight: '900',
+    color: COLORS.text, fontSize: rs(15), fontWeight: '900',
     letterSpacing: -rs(0.4), lineHeight: rs(38), marginBottom: rs(7),
     textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: rs(2) }, textShadowRadius: rs(8),
   },
