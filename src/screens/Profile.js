@@ -369,7 +369,6 @@ export default function ProfileScreen({ navigation }) {
   const [profileLoading, setProfileLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [moviesLoading, setMoviesLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
 
   // ─ Animations
@@ -428,11 +427,6 @@ export default function ProfileScreen({ navigation }) {
     finally { setMoviesLoading(false); }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadAll();
-    setRefreshing(false);
-  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // Animations
@@ -528,13 +522,7 @@ export default function ProfileScreen({ navigation }) {
       <Animated.View style={[styles.orb1, { transform: [{ scale: orbAnim1 }] }]} />
       <Animated.View style={[styles.orb2, { transform: [{ scale: orbAnim2 }] }]} />
 
-      <Animated.ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-        scrollEventThrottle={16}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />}>
+
 
         {/* ── HERO SECTION ──────────────────────────────────────────────── */}
         <View style={[styles.hero, { paddingTop: insets.top + 20 }]}>
