@@ -1,5 +1,5 @@
 // src/navigation/AppNavigator.js
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,27 @@ import {
   Animated,
   Dimensions,
   Platform,
-  Easing,
+  Easing, Keyboard
 } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, RADIUS } from '../data/theme';
 import Icon from 'react-native-vector-icons/Feather';
-
+const AnimatedIcon = Animated.createAnimatedComponent(Icon);
 import HomeScreen from '../screens/HomeScreen';
+import SearchScreen from '../screens/SearchScreen';
+import MovieDetails from '../components/MovieDetails';
+import FriendsScreen from '../screens/FriendScreen';
+import ProfileScreen from '../screens/Profile';
+import Player from '../components/Player'
 import {
-  SearchScreen,
-  MovieDetailScreen,
   GenreScreen,
-  MoviesScreen,
-  FriendsScreen,
-  ProfileScreen,
+  Chart,
 } from '../screens/AllScreens';
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -44,19 +46,19 @@ const scale = (size) => {
 
 // ── Tab Configuration ──────────────────────────────────────────────────────────
 const TAB_CONFIG = {
-  HomeTab: { icon: '⊞', label: 'Home' },
-  MoviesTab: { icon: '🎬', label: 'Movies' },
-  FriendsTab: { icon: '👥', label: 'Friends' },
-  ProfileTab: { icon: '👤', label: 'Profile' },
+  HomeTab: { icon: 'home', label: 'Home' },
+  SearchTab: { icon: 'search', label: 'Search' },
+  FriendsTab: { icon: 'users', label: 'Friends' },
+  ProfileTab: { icon: 'user', label: 'Profile' },
 };
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
-const ACTIVE_COLOR = '#0c0d0cff';
-const INACTIVE_COLOR = '#0c0d0cff';
+const ACTIVE_COLOR = '#2a0bf3ff';
+const INACTIVE_COLOR = '#15e3edff';
 
 // Bar: 24% transparent white glass
 const BAR_BG_COLORS = ['rgba(247, 244, 244, 0.24)', 'rgba(255,255,255,0.20)'];
-const BAR_BORDER = 'rgba(255,255,255,0.28)';
+const BAR_BORDER = 'rgba(240, 236, 236, 0.28)';
 const BAR_TOP_SHINE = ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.0)'];
 
 // Active pill: #00FFB2 tinted glass
@@ -209,9 +211,19 @@ function TabItem({ icon, label, focused, onPress, tabWidth }) {
           transform: [{ scale: iconScale }, { translateY: iconShiftY }],
         }}
       >
-        <Animated.Text style={[styles.tabIcon, { color: tintColor }]}>
-          {icon}
-        </Animated.Text>
+        <AnimatedIcon
+          name={icon} // This comes from your TAB_CONFIG
+          size={scale(22)}
+          style={[
+            styles.tabIcon,
+            {
+              color: tintColor,
+              // Optional: Adds a neon glow effect when active
+              textShadowColor: ACTIVE_COLOR,
+              textShadowOffset: { width: 0, height: 0 },
+            }
+          ]}
+        />
       </Animated.View>
 
       <Animated.Text
@@ -434,6 +446,36 @@ function FloatingButton({ onPress }) {
   );
 }
 
+
+
+const transitionSpec = {
+  open: {
+    animation: 'timing',
+    config: { duration: 500, easing: Easing.out(Easing.poly(5)) },
+  },
+  close: {
+    animation: 'timing',
+    config: { duration: 500, easing: Easing.in(Easing.poly(5)) },
+  },
+};
+
+const fadeSlideInterpolator = ({ current, layouts }) => {
+  return {
+    cardStyle: {
+      opacity: current.progress,
+      transform: [
+        {
+          translateY: current.progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [layouts.screen.height, 0], // slide up from bottom
+          }),
+        },
+      ],
+    },
+  };
+};
+
+
 // ── Shared screen options ──────────────────────────────────────────────────────
 const sharedScreenOpts = {
   headerShown: false,
@@ -446,23 +488,46 @@ const sharedScreenOpts = {
 function HomeStack() {
   return (
     <Stack.Navigator
-      screenOptions={{ ...sharedScreenOpts, animation: 'fade_from_bottom', freezeOnBlur: true }}
+      screenOptions={{
+        ...sharedScreenOpts,
+        animation: 'fade_from_bottom',
+        presentation: 'modal',   // transition style
+        // animation: 'fade', 
+        headerShown: false,
+        freezeOnBlur: true
+      }}
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />
-      <Stack.Screen name="MovieDetail" component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="MovieDetail" component={MovieDetails} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
       <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ animation: 'fade', animationDuration: 180 }} />
-      <Stack.Screen name="ProfileScreen" component={ProfileScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="Player" component={Player} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
 
-function MoviesStack() {
+function SearchStack() {
   return (
     <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
-      <Stack.Screen name="MoviesMain" component={MoviesScreen} />
-      <Stack.Screen name="MovieDetail" component={MovieDetailScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="Search" component={SearchScreen} />
+      <Stack.Screen name="MovieDetail" component={MovieDetails} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
       <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+    </Stack.Navigator>
+  );
+}
+
+function FriendStack() {
+  return (
+    <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
+      <Stack.Screen name="Friends" component={FriendsScreen} />
+      <Stack.Screen name="Chart" component={Chart} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+    </Stack.Navigator>
+  );
+}
+
+function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
+      <Stack.Screen name="Profile" component={ProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -470,15 +535,14 @@ function MoviesStack() {
 // ── Main tabs ──────────────────────────────────────────────────────────────────
 function MainTabs() {
 
-  // At the top of MainTabs()
-const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-useEffect(() => {
-  const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-  const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
-  return () => { show.remove(); hide.remove(); };
-}, []);
-  
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Tab.Navigator
@@ -490,10 +554,13 @@ useEffect(() => {
           freezeOnBlur: false,
         }}
       >
-        <Tab.Screen name="HomeTab" component={HomeStack} />
-        <Tab.Screen name="MoviesTab" component={MoviesStack} />
-        <Tab.Screen name="FriendsTab" component={FriendsScreen} />
-        <Tab.Screen name="ProfileTab" component={ProfileScreen} />
+        <Tab.Screen
+          name="HomeTab"
+          component={HomeStack}
+        />
+        <Tab.Screen name="SearchTab" component={SearchStack} />
+        <Tab.Screen name="FriendsTab" component={FriendStack} />
+        <Tab.Screen name="ProfileTab" component={ProfileStack} />
       </Tab.Navigator>
 
       <FloatingButton onPress={() => { }} />
@@ -587,10 +654,13 @@ const styles = StyleSheet.create({
     lineHeight: scale(26),
     includeFontPadding: false,
     textAlign: 'center',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
 
   tabLabel: {
-    fontSize: scale(10),
+    fontSize: scale(12),
+
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     letterSpacing: 0.15,
     marginTop: scale(2),
@@ -601,8 +671,8 @@ const styles = StyleSheet.create({
   activeDot: {
     position: 'absolute',
     bottom: scale(3),
-    width: scale(3.5),
-    height: scale(3.5),
+    width: scale(3),
+    height: scale(3),
     borderRadius: scale(2),
     backgroundColor: ACTIVE_COLOR,
     shadowColor: ACTIVE_COLOR,
