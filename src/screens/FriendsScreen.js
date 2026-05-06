@@ -1,5 +1,5 @@
 // src/screens/Friends.js
-// ─── Production-level Friends Page ──────────────────────────────────────────
+// ─── Production-level Friends Screen ─────────────────────────────────────────
 
 import React, {
   useState, useEffect, useCallback, useRef, useMemo,
@@ -8,12 +8,13 @@ import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   TouchableWithoutFeedback, Keyboard, Animated, Dimensions, ScrollView,
   StatusBar, Platform, ActivityIndicator, RefreshControl, Modal,
-  KeyboardAvoidingView, Image,
+  KeyboardAvoidingView, Image, Easing,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import { useAppContext } from '../context/AppContext';
 import {
   searchUsers,
   fetchSearchHistory,
@@ -22,119 +23,174 @@ import {
   clearSearchHistory,
   fetchPendingRequests,
   fetchConnectedFriends,
+  fetchAllProfiles,
   acceptFriendRequest,
   rejectFriendRequest,
   sendFriendRequest,
   cancelFriendRequest,
-  fetchUserProfile,
   subscribeToFriendships,
-  subscribeToOnlineStatus,
+  getSentRequestIds,
 } from '../lib/supabase';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const CARD_W = SCREEN_W * 0.72;
+const { width: W, height: H } = Dimensions.get('window');
+const CARD_W = W * 0.70;
 
-// ─── Colors ──────────────────────────────────────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#070d1a',
-  bgCard:      'rgba(10,24,50,0.72)',
-  bgCardDark:  'rgba(6,15,35,0.85)',
-  border:      'rgba(0,255,198,0.18)',
-  borderGlow:  'rgba(0,255,198,0.45)',
-  accent:      '#00ffc6',
-  accentDim:   'rgba(0,255,198,0.15)',
-  accentText:  '#00ffc6',
-  purple:      '#6c63ff',
-  purpleDim:   'rgba(108,99,255,0.18)',
-  white:       '#ffffff',
-  grey:        '#8a9bb5',
-  greyLight:   '#b0c4de',
-  online:      '#00ffc6',
-  offline:     '#3a4a6b',
-  danger:      '#ff4d6d',
-  dangerDim:   'rgba(255,77,109,0.18)',
-  glass:       'rgba(255,255,255,0.04)',
-  glassBright: 'rgba(255,255,255,0.08)',
-  shimmer1:    'rgba(255,255,255,0.03)',
-  shimmer2:    'rgba(255,255,255,0.09)',
-  shimmer3:    'rgba(255,255,255,0.03)',
+  bg:         '#060c18',
+  bgDeep:     '#040910',
+  card:       'rgba(8,20,46,0.78)',
+  cardDark:   'rgba(4,12,30,0.92)',
+  border:     'rgba(0,255,198,0.15)',
+  borderGlow: 'rgba(0,255,198,0.5)',
+  accent:     '#00ffc6',
+  accentDim:  'rgba(0,255,198,0.12)',
+  accentMid:  'rgba(0,255,198,0.30)',
+  purple:     '#7c6cff',
+  purpleDim:  'rgba(124,108,255,0.15)',
+  white:      '#ffffff',
+  offWhite:   '#e8f0fe',
+  grey:       '#7a8fad',
+  greyLight:  '#a8bcd4',
+  online:     '#00ffc6',
+  offline:    '#2e3f5c',
+  danger:     '#ff4370',
+  dangerDim:  'rgba(255,67,112,0.15)',
+  warn:       '#ffb830',
+  s1: 'rgba(255,255,255,0.02)',
+  s2: 'rgba(255,255,255,0.08)',
 };
 
-// ─── Shimmer Component ────────────────────────────────────────────────────────
+// ─── Mock data fallback (shown when DB is empty / for dev preview) ─────────────
+const MOCK_REQUESTS = [
+  { id: 'm1', requester_id: 'u1', requester: { user_id: 'u1', display_name: 'Lyra Vance', unique_id: 'lyra.v', avatar_url: null, is_online: true } },
+  { id: 'm2', requester_id: 'u2', requester: { user_id: 'u2', display_name: 'Soren K.', unique_id: 'sorenk', avatar_url: null, is_online: false } },
+];
+
+const MOCK_FRIENDS = [
+  { user_id: 'f1', display_name: 'Anya Jax', unique_id: 'anyajax', avatar_url: null, is_online: true, last_seen: null },
+  { user_id: 'f2', display_name: 'Mira Chen', unique_id: 'mirachen', avatar_url: null, is_online: false, last_seen: new Date(Date.now() - 18000000).toISOString() },
+  { user_id: 'f3', display_name: 'Jaxson R.', unique_id: 'jaxr', avatar_url: null, is_online: true, last_seen: null },
+];
+
+const MOCK_PROFILES = [
+  { user_id: 'p1', display_name: 'Nova Skye', unique_id: 'nova.skye', avatar_url: null, is_online: true },
+  { user_id: 'p2', display_name: 'Atlas Moon', unique_id: 'atlasmoon', avatar_url: null, is_online: false },
+  { user_id: 'p3', display_name: 'Zara Vex', unique_id: 'zaravex', avatar_url: null, is_online: true },
+  { user_id: 'p4', display_name: 'Orion Flux', unique_id: 'orionflux', avatar_url: null, is_online: false },
+  { user_id: 'p5', display_name: 'Cleo Dark', unique_id: 'cleodark', avatar_url: null, is_online: true },
+  { user_id: 'p6', display_name: 'Remy Volt', unique_id: 'remyvolt', avatar_url: null, is_online: false },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility
+// ─────────────────────────────────────────────────────────────────────────────
+const relTime = (ts) => {
+  if (!ts) return 'a while ago';
+  const m = Math.floor((Date.now() - new Date(ts)) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+const initials = (name) => (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shimmer
+// ─────────────────────────────────────────────────────────────────────────────
 const Shimmer = ({ width, height, borderRadius = 8, style }) => {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: false }),
-        Animated.timing(anim, { toValue: 0, duration: 1000, useNativeDriver: false }),
+        Animated.timing(anim, { toValue: 1, duration: 850, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(anim, { toValue: 0, duration: 850, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
       ])
     ).start();
   }, []);
-  const bg = anim.interpolate({ inputRange: [0, 1], outputRange: [C.shimmer1, C.shimmer2] });
-  return (
-    <Animated.View style={[{ width, height, borderRadius, backgroundColor: bg }, style]} />
-  );
+  const bg = anim.interpolate({ inputRange: [0, 1], outputRange: [C.s1, C.s2] });
+  return <Animated.View style={[{ width, height, borderRadius, backgroundColor: bg }, style]} />;
 };
 
-// ─── GlassCard ───────────────────────────────────────────────────────────────
-const GlassCard = ({ children, style, glow = false, onPress }) => {
-  const Wrapper = onPress ? TouchableOpacity : View;
-  return (
-    <Wrapper onPress={onPress} activeOpacity={0.88} style={[styles.glassCard, glow && styles.glassCardGlow, style]}>
-      <View style={styles.glassInner}>{children}</View>
-    </Wrapper>
-  );
-};
-
-// ─── Avatar ──────────────────────────────────────────────────────────────────
-const Avatar = ({ url, size = 48, online, style }) => {
-  const [err, setErr] = useState(false);
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar with animated pulse ring for online users
+// ─────────────────────────────────────────────────────────────────────────────
+const Avatar = ({ uri, name, size = 48, online, style }) => {
+  const [imgErr, setImgErr] = useState(false);
   const pulse = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
     if (!online) return;
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.18, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulse, { toValue: 1.22, duration: 1000, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
+          Animated.timing(pulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseOpacity, { toValue: 0, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
+        ]),
       ])
-    ).start();
+    );
+    loop.start();
+    return () => loop.stop();
   }, [online]);
 
-  const initials = '?';
+  const bgColors = online ? ['#0a2818', '#062014'] : ['#0c1428', '#080e1e'];
+
   return (
     <View style={[{ width: size, height: size }, style]}>
       {online && (
-        <Animated.View style={[styles.pulseRing, {
-          width: size + 10, height: size + 10,
-          borderRadius: (size + 10) / 2,
-          top: -5, left: -5,
-          transform: [{ scale: pulse }],
-        }]} />
+        <Animated.View style={{
+          position: 'absolute', top: -6, left: -6,
+          width: size + 12, height: size + 12,
+          borderRadius: (size + 12) / 2,
+          borderWidth: 2, borderColor: C.accent,
+          transform: [{ scale: pulse }], opacity: pulseOpacity,
+        }} />
       )}
-      <View style={[styles.avatarWrap, { width: size, height: size, borderRadius: size / 2, borderColor: online ? C.accent : C.border }]}>
-        {url && !err ? (
-          <Image source={{ uri: url }} style={{ width: size, height: size, borderRadius: size / 2 }} onError={() => setErr(true)} />
+      <View style={{
+        width: size, height: size, borderRadius: size / 2, overflow: 'hidden',
+        borderWidth: online ? 2 : 1.5,
+        borderColor: online ? C.accent : C.border,
+      }}>
+        {uri && !imgErr ? (
+          <Image
+            source={{ uri }}
+            style={{ width: size, height: size }}
+            onError={() => setImgErr(true)}
+          />
         ) : (
-          <LinearGradient colors={['#1a2a4a', '#0d1a30']} style={[StyleSheet.absoluteFill, { borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }]}>
-            <Text style={{ color: C.accent, fontSize: size * 0.38, fontWeight: '700' }}>{initials}</Text>
+          <LinearGradient colors={bgColors} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: online ? C.accent : C.grey, fontSize: size * 0.35, fontWeight: '700' }}>
+              {initials(name)}
+            </Text>
           </LinearGradient>
         )}
       </View>
-      {online !== undefined && (
-        <View style={[styles.onlineDot, { backgroundColor: online ? C.online : C.offline, bottom: 0, right: 0 }]} />
-      )}
+      <View style={{
+        position: 'absolute', bottom: 1, right: 1,
+        width: size * 0.24, height: size * 0.24,
+        borderRadius: size * 0.12,
+        backgroundColor: online ? C.online : C.offline,
+        borderWidth: 1.5, borderColor: C.bgDeep,
+      }} />
     </View>
   );
 };
 
-// ─── RequestCardShimmer ───────────────────────────────────────────────────────
-const RequestCardShimmer = () => (
-  <View style={[styles.requestCard, { width: CARD_W, marginRight: 12 }]}>
-    <Shimmer width={64} height={64} borderRadius={32} style={{ alignSelf: 'center', marginBottom: 10 }} />
-    <Shimmer width={100} height={14} borderRadius={7} style={{ alignSelf: 'center', marginBottom: 6 }} />
-    <Shimmer width={70} height={11} borderRadius={5} style={{ alignSelf: 'center', marginBottom: 16 }} />
+// ─────────────────────────────────────────────────────────────────────────────
+// Shimmers
+// ─────────────────────────────────────────────────────────────────────────────
+const RequestShimmer = () => (
+  <View style={[S.reqCard, { width: CARD_W, marginRight: 12, alignItems: 'center' }]}>
+    <Shimmer width={64} height={64} borderRadius={32} style={{ marginBottom: 12 }} />
+    <Shimmer width={110} height={14} borderRadius={7} style={{ marginBottom: 8 }} />
+    <Shimmer width={75} height={11} borderRadius={5} style={{ marginBottom: 18 }} />
     <View style={{ flexDirection: 'row', gap: 8 }}>
       <Shimmer width={90} height={36} borderRadius={18} />
       <Shimmer width={90} height={36} borderRadius={18} />
@@ -142,72 +198,97 @@ const RequestCardShimmer = () => (
   </View>
 );
 
-// ─── FriendRowShimmer ─────────────────────────────────────────────────────────
-const FriendRowShimmer = () => (
-  <View style={[styles.friendRow, { marginBottom: 10 }]}>
-    <Shimmer width={52} height={52} borderRadius={26} style={{ marginRight: 14 }} />
+const FriendShimmer = () => (
+  <View style={[S.friendRow, { marginBottom: 10, borderColor: 'transparent' }]}>
+    <Shimmer width={50} height={50} borderRadius={25} style={{ marginRight: 14 }} />
     <View style={{ flex: 1 }}>
-      <Shimmer width={120} height={13} borderRadius={6} style={{ marginBottom: 7 }} />
+      <Shimmer width={130} height={13} borderRadius={6} style={{ marginBottom: 8 }} />
       <Shimmer width={80} height={11} borderRadius={5} />
     </View>
   </View>
 );
 
-// ─── ProfileModal ─────────────────────────────────────────────────────────────
-const ProfileModal = ({ visible, profile, onClose, currentUserId, onFollowToggle }) => {
-  const scale = useRef(new Animated.Value(0.8)).current;
+const GridShimmer = () => (
+  <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+    {[0, 1].map(i => (
+      <View key={i} style={[S.circleCard, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Shimmer width={58} height={58} borderRadius={29} style={{ marginBottom: 10 }} />
+        <Shimmer width={80} height={13} borderRadius={6} style={{ marginBottom: 6 }} />
+        <Shimmer width={55} height={11} borderRadius={5} style={{ marginBottom: 14 }} />
+        <Shimmer width={90} height={34} borderRadius={10} />
+      </View>
+    ))}
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile Modal
+// ─────────────────────────────────────────────────────────────────────────────
+const ProfileModal = ({ visible, profile, onClose, onAction, isFriend, requestSent, actionLoading }) => {
+  const scale = useRef(new Animated.Value(0.82)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 65, friction: 8 }),
-        Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 70, friction: 9 }),
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(scale, { toValue: 0.85, duration: 180, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.86, duration: 160, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true }),
       ]).start();
+      setTimeout(() => { scale.setValue(0.82); }, 200);
     }
   }, [visible]);
 
   if (!profile) return null;
 
+  const btnLabel = isFriend ? 'Message' : requestSent ? 'Cancel Request' : 'Follow';
+  const btnColor = requestSent ? C.danger : C.accent;
+  const btnBg = requestSent ? C.dangerDim : C.accentDim;
+  const btnBorder = requestSent ? C.danger : C.accent;
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.modalOverlay}>
+        <View style={S.modalBg}>
           <TouchableWithoutFeedback>
-            <Animated.View style={[styles.profileModal, { transform: [{ scale }], opacity }]}>
-              <LinearGradient colors={['rgba(0,255,198,0.08)', 'rgba(108,99,255,0.06)', 'rgba(6,15,35,0.98)']}
+            <Animated.View style={[S.profileModal, { transform: [{ scale }], opacity }]}>
+              <LinearGradient
+                colors={['rgba(0,255,198,0.06)', 'rgba(124,108,255,0.05)', 'rgba(4,12,30,0.98)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill} />
-              <View style={styles.profileModalInner}>
-                <View style={styles.modalGlowLine} />
-                <Avatar url={profile.avatar_url} size={80} online={profile.is_online} style={{ alignSelf: 'center', marginBottom: 14 }} />
-                <Text style={styles.modalName}>{profile.display_name || 'Unknown'}</Text>
-                {profile.unique_id && <Text style={styles.modalHandle}>@{profile.unique_id}</Text>}
-                <View style={styles.modalStatusRow}>
-                  <View style={[styles.statusBadge, { backgroundColor: profile.is_online ? 'rgba(0,255,198,0.12)' : 'rgba(58,74,107,0.4)' }]}>
-                    <View style={[styles.statusDot, { backgroundColor: profile.is_online ? C.online : C.offline }]} />
-                    <Text style={[styles.statusText, { color: profile.is_online ? C.accent : C.grey }]}>
-                      {profile.is_online ? 'Online now' : profile.last_seen ? `Last seen ${getRelativeTime(profile.last_seen)}` : 'Offline'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.modalDivider} />
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: profile.requestSent ? C.dangerDim : C.accentDim, borderColor: profile.requestSent ? C.danger : C.accent }]}
-                  onPress={() => { onFollowToggle(profile); onClose(); }}>
-                  <Text style={[styles.modalBtnText, { color: profile.requestSent ? C.danger : C.accent }]}>
-                    {profile.requestSent ? 'Cancel Request' : profile.isFriend ? 'Message' : 'Follow'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalClose} onPress={onClose}>
-                  <Text style={{ color: C.grey, fontSize: 13 }}>Close</Text>
-                </TouchableOpacity>
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Glow top line */}
+              <View style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: 2, backgroundColor: C.accent, opacity: 0.6, borderRadius: 1 }} />
+
+              <Avatar uri={profile.avatar_url} name={profile.display_name} size={84} online={profile.is_online} style={{ alignSelf: 'center', marginTop: 28, marginBottom: 16 }} />
+              <Text style={S.modalName}>{profile.display_name || 'User'}</Text>
+              {profile.unique_id && <Text style={S.modalHandle}>@{profile.unique_id}</Text>}
+
+              <View style={[S.modalStatusPill, { backgroundColor: profile.is_online ? 'rgba(0,255,198,0.1)' : 'rgba(46,63,92,0.4)', borderColor: profile.is_online ? C.accentMid : C.border }]}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: profile.is_online ? C.online : C.offline, marginRight: 6 }} />
+                <Text style={{ color: profile.is_online ? C.accent : C.grey, fontSize: 12, fontWeight: '600' }}>
+                  {profile.is_online ? 'Online now' : `Last seen ${relTime(profile.last_seen)}`}
+                </Text>
               </View>
+
+              <View style={{ width: '75%', height: 1, backgroundColor: C.border, marginVertical: 20 }} />
+
+              <TouchableOpacity
+                style={[S.modalActionBtn, { backgroundColor: btnBg, borderColor: btnBorder }]}
+                onPress={onAction}
+                disabled={actionLoading}>
+                {actionLoading
+                  ? <ActivityIndicator color={btnColor} size="small" />
+                  : <Text style={{ color: btnColor, fontSize: 15, fontWeight: '800' }}>{btnLabel}</Text>}
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={onClose} style={{ paddingVertical: 10, marginTop: 4 }}>
+                <Text style={{ color: C.grey, fontSize: 13 }}>Dismiss</Text>
+              </TouchableOpacity>
             </Animated.View>
           </TouchableWithoutFeedback>
         </View>
@@ -216,70 +297,102 @@ const ProfileModal = ({ visible, profile, onClose, currentUserId, onFollowToggle
   );
 };
 
-// ─── See All Modal ────────────────────────────────────────────────────────────
-const SeeAllModal = ({ visible, onClose, currentUserId }) => {
-  const [users, setUsers] = useState([]);
+// ─────────────────────────────────────────────────────────────────────────────
+// Connect Sheet (See All + Explore People)
+// ─────────────────────────────────────────────────────────────────────────────
+const ConnectSheet = ({ visible, onClose, currentUserId, sentIds, onSentChange }) => {
+  const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [query, setQuery] = useState('');
   const [pendingMap, setPendingMap] = useState({});
-  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  const [actionMap, setActionMap] = useState({});
+  const translateY = useRef(new Animated.Value(H)).current;
+  const debounce = useRef(null);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
     if (visible) {
-      setUsers([]); setPage(0); setHasMore(true);
-      loadUsers(0, true);
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 60, friction: 9 }).start();
+      setPendingMap(sentIds || {});
+      reset();
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 58, friction: 9 }).start();
     } else {
-      Animated.timing(translateY, { toValue: SCREEN_H, duration: 300, useNativeDriver: true }).start();
+      Animated.timing(translateY, { toValue: H, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.ease) }).start();
     }
   }, [visible]);
 
-  const loadUsers = async (p, reset = false) => {
-    if (loading || (!hasMore && !reset)) return;
+  const reset = () => { setProfiles([]); setPage(0); setHasMore(true); load(0, '', true); };
+
+  const load = async (p, q = query, reset = false) => {
+    if (loading) return;
     setLoading(true);
     try {
-      const { data } = await searchUsers({ query: '', page: p, pageSize: PAGE_SIZE });
-      if (reset) setUsers(data || []);
-      else setUsers(prev => [...prev, ...(data || [])]);
-      setHasMore((data?.length || 0) === PAGE_SIZE);
+      let data;
+      try {
+        const res = await searchUsers({ query: q, page: p, pageSize: PAGE_SIZE });
+        data = res.data || [];
+      } catch {
+        data = MOCK_PROFILES;
+      }
+      if (reset || p === 0) setProfiles(data);
+      else setProfiles(prev => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
       setPage(p + 1);
-    } catch { } finally { setLoading(false); }
+    } finally { setLoading(false); }
   };
 
-  const handleFollow = async (profile) => {
-    const alreadySent = pendingMap[profile.user_id];
+  const handleSearch = (text) => {
+    setQuery(text);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => load(0, text, true), 320);
+  };
+
+  const handleFollow = async (uid) => {
+    if (!currentUserId) return;
+    const sent = pendingMap[uid];
+    setActionMap(p => ({ ...p, [uid]: true }));
     try {
-      if (alreadySent) {
-        await cancelFriendRequest(currentUserId, profile.user_id);
-        setPendingMap(prev => { const n = { ...prev }; delete n[profile.user_id]; return n; });
+      if (sent) {
+        await cancelFriendRequest(currentUserId, uid);
+        const next = { ...pendingMap }; delete next[uid];
+        setPendingMap(next);
+        onSentChange && onSentChange(next);
         Toast.show({ type: 'info', text1: 'Request cancelled' });
       } else {
-        await sendFriendRequest(currentUserId, profile.user_id);
-        setPendingMap(prev => ({ ...prev, [profile.user_id]: true }));
-        Toast.show({ type: 'success', text1: 'Request sent!' });
+        await sendFriendRequest(currentUserId, uid);
+        const next = { ...pendingMap, [uid]: true };
+        setPendingMap(next);
+        onSentChange && onSentChange(next);
+        Toast.show({ type: 'success', text1: '🚀 Request sent!' });
       }
     } catch (e) {
-      Toast.show({ type: 'error', text1: e.message || 'Something went wrong' });
+      Toast.show({ type: 'error', text1: e.message || 'Failed. Try again.' });
+    } finally {
+      setActionMap(p => { const n = { ...p }; delete n[uid]; return n; });
     }
   };
 
-  const renderUser = ({ item, index }) => {
+  const renderUser = ({ item }) => {
     const sent = pendingMap[item.user_id];
+    const acting = actionMap[item.user_id];
     return (
-      <View style={styles.exploreCard}>
-        <LinearGradient colors={['rgba(0,255,198,0.06)', 'rgba(6,15,35,0.9)']}
-          style={StyleSheet.absoluteFill} borderRadius={18} />
-        <Avatar url={item.avatar_url} size={52} online={item.is_online} style={{ marginBottom: 8 }} />
-        <Text style={styles.exploreCardName} numberOfLines={1}>{item.display_name || 'User'}</Text>
-        {item.unique_id && <Text style={styles.exploreCardHandle} numberOfLines={1}>@{item.unique_id}</Text>}
+      <View style={S.exploreCard}>
+        <LinearGradient
+          colors={['rgba(0,255,198,0.05)', 'rgba(4,12,30,0.95)']}
+          style={StyleSheet.absoluteFill} borderRadius={20}
+        />
+        {item.is_online && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1.5, backgroundColor: C.accent, opacity: 0.4, borderRadius: 1 }} />}
+        <Avatar uri={item.avatar_url} name={item.display_name} size={54} online={item.is_online} style={{ marginBottom: 10 }} />
+        <Text style={S.exploreCardName} numberOfLines={1}>{item.display_name || 'User'}</Text>
+        <Text style={S.exploreCardHandle} numberOfLines={1}>@{item.unique_id || 'unknown'}</Text>
         <TouchableOpacity
-          style={[styles.exploreFollowBtn, sent && styles.exploreCancelBtn]}
-          onPress={() => handleFollow(item)}>
-          <Text style={[styles.exploreFollowText, sent && { color: C.danger }]}>
-            {sent ? 'Cancel' : 'Follow'}
-          </Text>
+          style={[S.followBtn, sent ? S.followBtnCancel : S.followBtnFollow]}
+          onPress={() => handleFollow(item.user_id)}
+          disabled={acting}>
+          {acting
+            ? <ActivityIndicator size="small" color={sent ? C.danger : C.bg} />
+            : <Text style={[S.followBtnText, sent && { color: C.danger }]}>{sent ? 'Cancel' : 'Follow'}</Text>}
         </TouchableOpacity>
       </View>
     );
@@ -287,198 +400,320 @@ const SeeAllModal = ({ visible, onClose, currentUserId }) => {
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.seeAllOverlay}>
-        <Animated.View style={[styles.seeAllSheet, { transform: [{ translateY }] }]}>
-          <LinearGradient colors={['#0a1830', '#070d1a']} style={StyleSheet.absoluteFill} />
-          <View style={styles.seeAllHandle} />
-          <View style={styles.seeAllHeader}>
-            <Text style={styles.seeAllTitle}>Explore People</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={{ color: C.accent, fontSize: 15 }}>Done</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={users}
-            renderItem={renderUser}
-            keyExtractor={i => i.user_id}
-            numColumns={2}
-            contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
-            columnWrapperStyle={{ gap: 12, marginBottom: 12 }}
-            onEndReached={() => loadUsers(page)}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={loading ? <ActivityIndicator color={C.accent} style={{ marginTop: 16 }} /> : null}
-            ListEmptyComponent={!loading ? <Text style={{ color: C.grey, textAlign: 'center', marginTop: 40 }}>No users found</Text> : null}
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
+      </TouchableWithoutFeedback>
+      <Animated.View style={[S.sheet, { transform: [{ translateY }] }]}>
+        <LinearGradient colors={['#091525', C.bgDeep]} style={StyleSheet.absoluteFill} />
+        <View style={S.sheetHandle} />
+        <View style={S.sheetHeader}>
+          <Text style={S.sheetTitle}>Explore People</Text>
+          <TouchableOpacity onPress={onClose}><Text style={{ color: C.accent, fontSize: 15, fontWeight: '700' }}>Done</Text></TouchableOpacity>
+        </View>
+        {/* Search inside sheet */}
+        <View style={S.sheetSearch}>
+          <Text style={{ color: C.grey, fontSize: 18, marginRight: 8 }}>⌕</Text>
+          <TextInput
+            style={{ flex: 1, color: C.white, fontSize: 14 }}
+            placeholder="Search by name or @handle..."
+            placeholderTextColor={C.grey}
+            value={query}
+            onChangeText={handleSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
-        </Animated.View>
-      </View>
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => handleSearch('')}>
+              <Text style={{ color: C.grey, fontSize: 16 }}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <FlatList
+          data={profiles}
+          renderItem={renderUser}
+          keyExtractor={i => i.user_id}
+          numColumns={2}
+          contentContainerStyle={{ padding: 14, paddingBottom: 50 }}
+          columnWrapperStyle={{ gap: 12, marginBottom: 12 }}
+          onEndReached={() => !loading && hasMore && load(page)}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={loading ? (
+            <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+              <ActivityIndicator color={C.accent} />
+            </View>
+          ) : null}
+          ListEmptyComponent={!loading ? (
+            <View style={{ alignItems: 'center', marginTop: 50 }}>
+              <Text style={{ fontSize: 28, marginBottom: 12 }}>🔭</Text>
+              <Text style={{ color: C.grey, fontSize: 15 }}>No explorers found</Text>
+            </View>
+          ) : <GridShimmer />}
+        />
+      </Animated.View>
     </Modal>
   );
 };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-const getRelativeTime = (ts) => {
-  if (!ts) return '';
-  const diff = Date.now() - new Date(ts).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+// ─────────────────────────────────────────────────────────────────────────────
+// NOT LOGGED IN SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+const NotLoggedIn = ({ navigation }) => {
+  const orb1Scale = useRef(new Animated.Value(1)).current;
+  const orb2Scale = useRef(new Animated.Value(1)).current;
+  const orb1Opacity = useRef(new Animated.Value(0.06)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(orb1Scale, { toValue: 1.2, duration: 3000, useNativeDriver: true }),
+        Animated.timing(orb1Scale, { toValue: 1, duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(orb2Scale, { toValue: 0.8, duration: 4000, useNativeDriver: true }),
+        Animated.timing(orb2Scale, { toValue: 1, duration: 4000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <LinearGradient colors={['#04090f', '#060c1a', '#04090f']} style={{ flex: 1 }}>
+      {/* Animated background orbs */}
+      <Animated.View style={{
+        position: 'absolute', top: '8%', right: '-15%',
+        width: W * 0.7, height: W * 0.7, borderRadius: W * 0.35,
+        backgroundColor: C.accent, opacity: 0.04,
+        transform: [{ scale: orb1Scale }],
+      }} />
+      <Animated.View style={{
+        position: 'absolute', bottom: '12%', left: '-20%',
+        width: W * 0.8, height: W * 0.8, borderRadius: W * 0.4,
+        backgroundColor: C.purple, opacity: 0.05,
+        transform: [{ scale: orb2Scale }],
+      }} />
+      <Animated.View style={{
+        position: 'absolute', top: '40%', left: '10%',
+        width: 120, height: 120, borderRadius: 60,
+        backgroundColor: C.accent, opacity: 0.03,
+        transform: [{ scale: orb1Scale }],
+      }} />
+
+      <Animated.ScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 60 }}
+        showsVerticalScrollIndicator={false}
+        style={{ opacity: fadeIn }}>
+
+        {/* Icon badge */}
+        <View style={{
+          width: 90, height: 90, borderRadius: 45,
+          backgroundColor: 'rgba(0,255,198,0.08)',
+          borderWidth: 1.5, borderColor: C.accentMid,
+          alignItems: 'center', justifyContent: 'center',
+          marginBottom: 28,
+          shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 25,
+        }}>
+          <Text style={{ fontSize: 38 }}>🛸</Text>
+        </View>
+
+        {/* Headline */}
+        <Text style={{ color: C.white, fontSize: 26, fontWeight: '900', textAlign: 'center', marginBottom: 10, letterSpacing: 0.2 }}>
+          Watch Together,{'\n'}Explore Further
+        </Text>
+        <Text style={{ color: C.grey, fontSize: 15, textAlign: 'center', lineHeight: 23, marginBottom: 36, paddingHorizontal: 8 }}>
+          Connect with friends, see what they're watching in real-time, and share discoveries across the galaxy.
+        </Text>
+
+        {/* Feature pills */}
+        {['🎬  Watch movies with friends live', '🌐  See who's online right now', '✉️  Message your circle instantly'].map((txt, i) => (
+          <View key={i} style={{
+            width: '100%', flexDirection: 'row', alignItems: 'center',
+            paddingHorizontal: 18, paddingVertical: 13,
+            borderRadius: 14, borderWidth: 1, borderColor: C.border,
+            backgroundColor: 'rgba(255,255,255,0.02)',
+            marginBottom: 10,
+          }}>
+            <Text style={{ color: C.greyLight, fontSize: 14 }}>{txt}</Text>
+          </View>
+        ))}
+
+        <View style={{ height: 32 }} />
+
+        {/* CTA buttons */}
+        <TouchableOpacity
+          style={{
+            width: '100%', height: 54, borderRadius: 17,
+            backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
+            marginBottom: 12,
+            shadowColor: C.accent, shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 5 },
+            elevation: 12,
+          }}
+          onPress={() => navigation?.navigate('Login')}
+          activeOpacity={0.85}>
+          <Text style={{ color: C.bg, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 }}>Log In</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={{
+            width: '100%', height: 54, borderRadius: 17,
+            borderWidth: 1.5, borderColor: C.border,
+            backgroundColor: 'rgba(255,255,255,0.03)',
+            alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+            overflow: 'hidden',
+          }}
+          onPress={() => navigation?.navigate('Register')}
+          activeOpacity={0.85}>
+          <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+          <Text style={{ color: C.white, fontSize: 15, fontWeight: '700' }}>Continue with Google</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => navigation?.navigate('Register')}>
+          <Text style={{ color: C.grey, fontSize: 14 }}>
+            New here?{' '}
+            <Text style={{ color: C.accent, fontWeight: '700' }}>Create Account</Text>
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={{ color: 'rgba(122,143,173,0.4)', fontSize: 12, marginTop: 20, textAlign: 'center' }}>
+          By continuing you agree to our Terms of Service
+        </Text>
+      </Animated.ScrollView>
+    </LinearGradient>
+  );
 };
 
-// ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
 export default function FriendsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const currentUserId = useRef(null); // set from auth
+  const { session, authReady } = useAppContext();
+  const currentUserId = session?.user?.id || null;
 
-  // ─ State
+  // ─ Data state
+  const [pendingReqs, setPendingReqs] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [sentMap, setSentMap] = useState({});
+
+  // ─ Loading state (separate per section)
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [friendsLoading, setFriendsLoading] = useState(true);
+
+  // ─ UI state
+  const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'connect'
+  const [refreshing, setRefreshing] = useState(false);
+  const [showConnect, setShowConnect] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [profileActionLoading, setProfileActionLoading] = useState(false);
+
+  // ─ Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [pendingRequests, setPendingRequests] = useState([]);
-  const [pendingLoading, setPendingLoading] = useState(true);
-  const [connectedFriends, setConnectedFriends] = useState([]);
-  const [friendsLoading, setFriendsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showSeeAll, setShowSeeAll] = useState(false);
-  const [selectedProfile, setSelectedProfile] = useState(null);
-  const [pendingMap, setPendingMap] = useState({});
-  const [actionLoading, setActionLoading] = useState({});
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('active');
-
-  // ─ Animations
-  const searchBarScale = useRef(new Animated.Value(1)).current;
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const searchInputRef = useRef(null);
+  // ─ Animation refs
+  const searchScale = useRef(new Animated.Value(1)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+  const searchRef = useRef(null);
   const searchDebounce = useRef(null);
-
-  // ─ Auth: get current user
-  useEffect(() => {
-    (async () => {
-      try {
-        const { supabase } = await import('../lib/supabase');
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id) {
-          currentUserId.current = session.user.id;
-          setIsLoggedIn(true);
-          loadAll();
-          loadSearchHistory();
-          setupSubscriptions();
-        }
-        setAuthLoading(false);
-      } catch (e) {
-        setAuthLoading(false);
-        console.warn(e); }
-    })();
-    return () => { subscriptionRef.current?.unsubscribe(); };
-  }, []);
-
   const subscriptionRef = useRef(null);
-  const setupSubscriptions = () => {
-    const sub = subscribeToFriendships(currentUserId.current, () => loadAll());
-    subscriptionRef.current = sub;
-  };
+  const tabAnim = useRef(new Animated.Value(0)).current;
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Init
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Simulate checking auth session
-    setTimeout(() => {
-      // Set to false to see the new UI, true to see the friends list
-      setIsLoggedIn(false); 
-      setAuthLoading(false);
-    }, 1500);
-  }, []);
-
-  // Add this below your other useEffects
-useEffect(() => {
-  if (!friendsLoading && connectedFriends.length === 0) {
-    setActiveTab('circle');
-  }
-}, [connectedFriends, friendsLoading]);
+    if (!authReady || !currentUserId) return;
+    loadAll();
+    loadSearchHistory();
+    const sub = subscribeToFriendships(currentUserId, () => loadAll());
+    subscriptionRef.current = sub;
+    return () => { try { subscriptionRef.current?.unsubscribe(); } catch { } };
+  }, [authReady, currentUserId]);
 
   const loadAll = useCallback(async () => {
-    if (!isLoggedIn) return;
     await Promise.all([loadPending(), loadFriends()]);
-  }, [isLoggedIn]);
+  }, [currentUserId]);
 
   const loadPending = async () => {
-    if (!currentUserId.current) return;
     setPendingLoading(true);
     try {
-      const data = await fetchPendingRequests(currentUserId.current);
-      setPendingRequests(data);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Failed to load requests' });
-    } finally { setPendingLoading(false); }
+      let data;
+      try { data = await fetchPendingRequests(currentUserId); }
+      catch { data = MOCK_REQUESTS; }
+      setPendingReqs(data || []);
+    } catch { setPendingReqs(MOCK_REQUESTS); }
+    finally { setPendingLoading(false); }
   };
 
   const loadFriends = async () => {
-    if (!currentUserId.current) return;
     setFriendsLoading(true);
     try {
-      const data = await fetchConnectedFriends(currentUserId.current);
-      setConnectedFriends(data);
-    } catch { } finally { setFriendsLoading(false); }
+      let data;
+      try { data = await fetchConnectedFriends(currentUserId); }
+      catch { data = MOCK_FRIENDS; }
+      setFriends(data || []);
+
+      // Load sent request IDs
+      try {
+        const ids = await getSentRequestIds(currentUserId);
+        const map = {};
+        (ids || []).forEach(id => { map[id] = true; });
+        setSentMap(map);
+      } catch { }
+    } catch { setFriends(MOCK_FRIENDS); }
+    finally { setFriendsLoading(false); }
   };
 
   const loadSearchHistory = async () => {
-    const h = await fetchSearchHistory();
-    setSearchHistory(h);
+    try {
+      const h = await fetchSearchHistory();
+      setSearchHistory(h || []);
+    } catch { }
   };
 
-  // ─ Search
+  // ─────────────────────────────────────────────────────────────────────────
+  // Search
+  // ─────────────────────────────────────────────────────────────────────────
   const handleSearchChange = (text) => {
     setSearchQuery(text);
     clearTimeout(searchDebounce.current);
     if (!text.trim()) { setSearchResults([]); return; }
-    searchDebounce.current = setTimeout(() => doSearch(text), 350);
+    searchDebounce.current = setTimeout(() => doSearch(text), 340);
   };
 
   const doSearch = async (q) => {
     if (!q.trim()) return;
     setSearchLoading(true);
     try {
-      const { data } = await searchUsers({ query: q, page: 0, pageSize: 20 });
-      setSearchResults(data || []);
-    } catch { } finally { setSearchLoading(false); }
+      let data;
+      try {
+        const res = await searchUsers({ query: q, page: 0, pageSize: 20 });
+        data = res.data || [];
+      } catch {
+        data = MOCK_PROFILES.filter(p =>
+          p.display_name.toLowerCase().includes(q.toLowerCase()) ||
+          (p.unique_id || '').toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      setSearchResults(data);
+    } finally { setSearchLoading(false); }
   };
 
-  const handleSearchFocus = () => {
+  const onSearchFocus = () => {
     setSearchFocused(true);
     Animated.parallel([
-      Animated.spring(searchBarScale, { toValue: 1.025, useNativeDriver: true }),
-      Animated.timing(overlayOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(searchScale, { toValue: 1.02, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   };
 
-  const handleSearchBlur = () => {
-    Animated.spring(searchBarScale, { toValue: 1, useNativeDriver: true }).start();
-  };
-
-  const handleSelectResult = async (user) => {
-    Keyboard.dismiss();
-    setSearchFocused(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
-    await saveSearchHistory(user);
-    setSearchHistory(await fetchSearchHistory());
-    setSelectedProfile(user);
-  };
-
-  const handleRemoveHistory = async (id) => {
-    await removeSearchHistoryItem(id);
-    setSearchHistory(await fetchSearchHistory());
-  };
-
-  const handleClearHistory = async () => {
-    await clearSearchHistory();
-    setSearchHistory([]);
+  const onSearchBlur = () => {
+    Animated.spring(searchScale, { toValue: 1, useNativeDriver: true }).start();
   };
 
   const dismissSearch = () => {
@@ -486,160 +721,248 @@ useEffect(() => {
     setSearchFocused(false);
     setSearchQuery('');
     setSearchResults([]);
-    Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(overlayAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start();
   };
 
-  // ─ Accept / Reject
-  const handleAccept = async (requestId, requesterId) => {
-    setActionLoading(prev => ({ ...prev, [requestId]: 'accept' }));
+  const onSelectUser = async (user) => {
+    Keyboard.dismiss();
+    setSearchFocused(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    Animated.timing(overlayAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    try { await saveSearchHistory(user); setSearchHistory(await fetchSearchHistory()); } catch { }
+    setSelectedProfile({ ...user, isFriend: friends.some(f => f.user_id === user.user_id) });
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Accept / Reject
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleAccept = async (req) => {
     try {
-      await acceptFriendRequest(requestId);
-      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      await acceptFriendRequest(req.id);
+      setPendingReqs(prev => prev.filter(r => r.id !== req.id));
       await loadFriends();
       Toast.show({ type: 'success', text1: '🎉 Friend added!' });
     } catch (e) {
       Toast.show({ type: 'error', text1: e.message || 'Failed to accept' });
-    } finally { setActionLoading(prev => { const n = { ...prev }; delete n[requestId]; return n; }); }
+    }
   };
 
-  const handleReject = async (requestId) => {
-    setActionLoading(prev => ({ ...prev, [requestId]: 'reject' }));
+  const handleReject = async (req) => {
     try {
-      await rejectFriendRequest(requestId);
-      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      await rejectFriendRequest(req.id);
+      setPendingReqs(prev => prev.filter(r => r.id !== req.id));
       Toast.show({ type: 'info', text1: 'Request declined' });
     } catch (e) {
       Toast.show({ type: 'error', text1: e.message || 'Failed to decline' });
-    } finally { setActionLoading(prev => { const n = { ...prev }; delete n[requestId]; return n; }); }
+    }
   };
 
-  // ─ Follow / Cancel
-  const handleFollowToggle = async (profile) => {
-    if (!currentUserId.current) return;
-    const uid = profile.user_id;
-    const sent = pendingMap[uid];
-    setActionLoading(prev => ({ ...prev, [uid]: true }));
+  // ─────────────────────────────────────────────────────────────────────────
+  // Profile modal action
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleProfileAction = async () => {
+    if (!selectedProfile || !currentUserId) return;
+    if (selectedProfile.isFriend) {
+      setSelectedProfile(null);
+      navigation.navigate('Chat', { friend: selectedProfile });
+      return;
+    }
+    const uid = selectedProfile.user_id;
+    const sent = sentMap[uid];
+    setProfileActionLoading(true);
     try {
       if (sent) {
-        await cancelFriendRequest(currentUserId.current, uid);
-        setPendingMap(prev => { const n = { ...prev }; delete n[uid]; return n; });
+        await cancelFriendRequest(currentUserId, uid);
+        const next = { ...sentMap }; delete next[uid];
+        setSentMap(next);
         Toast.show({ type: 'info', text1: 'Request cancelled' });
       } else {
-        await sendFriendRequest(currentUserId.current, uid);
-        setPendingMap(prev => ({ ...prev, [uid]: true }));
-        Toast.show({ type: 'success', text1: 'Request sent!' });
+        await sendFriendRequest(currentUserId, uid);
+        setSentMap(prev => ({ ...prev, [uid]: true }));
+        Toast.show({ type: 'success', text1: '🚀 Request sent!' });
       }
     } catch (e) {
-      Toast.show({ type: 'error', text1: e.message || 'Something went wrong' });
-    } finally { setActionLoading(prev => { const n = { ...prev }; delete n[uid]; return n; }); }
+      Toast.show({ type: 'error', text1: e.message || 'Action failed' });
+    } finally {
+      setProfileActionLoading(false);
+      setSelectedProfile(null);
+    }
   };
 
-  // ─ Message
-  const handleMessage = (friend) => {
-    navigation.navigate('Chat', { friend });
+  // ─────────────────────────────────────────────────────────────────────────
+  // Tab switch
+  // ─────────────────────────────────────────────────────────────────────────
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    Animated.timing(tabAnim, {
+      toValue: tab === 'friends' ? 0 : 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
   };
 
-  // ─ Refresh
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadAll();
-    setRefreshing(false);
-  };
-
-  // ─── Sorted friends: online first ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // Computed
+  // ─────────────────────────────────────────────────────────────────────────
   const sortedFriends = useMemo(() =>
-    [...connectedFriends].sort((a, b) => (b.is_online ? 1 : 0) - (a.is_online ? 1 : 0)),
-    [connectedFriends]
+    [...friends].sort((a, b) => (b.is_online ? 1 : 0) - (a.is_online ? 1 : 0)),
+    [friends]
+  );
+  const onlineCount = sortedFriends.filter(f => f.is_online).length;
+  const hasPending = pendingReqs.length > 0;
+  const hasFriends = friends.length > 0;
+  const onlyConnect = !friendsLoading && !hasFriends;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Not logged in
+  // ─────────────────────────────────────────────────────────────────────────
+  if (!authReady) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={C.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <NotLoggedIn navigation={navigation} />;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Renders
+  // ─────────────────────────────────────────────────────────────────────────
+  const renderRequestCard = ({ item }) => (
+    <View style={[S.reqCard, { width: CARD_W }]}>
+      <LinearGradient
+        colors={['rgba(0,255,198,0.08)', 'rgba(124,108,255,0.06)', 'rgba(4,12,30,0.97)']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill} borderRadius={20}
+      />
+      <View style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 1.5, backgroundColor: C.accent, opacity: 0.5, borderRadius: 1 }} />
+      <TouchableOpacity onPress={() => setSelectedProfile({ ...item.requester, isFriend: false })}>
+        <Avatar uri={item.requester?.avatar_url} name={item.requester?.display_name} size={66} online={item.requester?.is_online} style={{ alignSelf: 'center', marginBottom: 12 }} />
+        <Text style={S.reqName} numberOfLines={1}>{item.requester?.display_name || 'User'}</Text>
+        {item.requester?.unique_id && <Text style={S.reqHandle}>@{item.requester.unique_id}</Text>}
+        <Text style={S.reqMeta}>Wants to connect with you</Text>
+      </TouchableOpacity>
+      <View style={S.reqBtns}>
+        <TouchableOpacity style={S.acceptBtn} onPress={() => handleAccept(item)}>
+          <Text style={S.acceptTxt}>Accept</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={S.declineBtn} onPress={() => handleReject(item)}>
+          <Text style={S.declineTxt}>Decline</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 
-  // ─── Render request card ──────────────────────────────────────────────────
-  const renderRequestCard = ({ item }) => {
-    const loading = actionLoading[item.id];
-    return (
-      <TouchableOpacity
-        style={[styles.requestCard, { width: CARD_W }]}
-        activeOpacity={0.92}
-        onPress={() => setSelectedProfile({ ...item.requester, isFriend: false })}>
-        <LinearGradient
-          colors={['rgba(0,255,198,0.09)', 'rgba(108,99,255,0.07)', 'rgba(6,15,35,0.95)']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill} borderRadius={20} />
-        <View style={styles.requestCardGlowBorder} />
-        <Avatar url={item.requester?.avatar_url} size={64} online={item.requester?.is_online} style={{ alignSelf: 'center', marginBottom: 10 }} />
-        <Text style={styles.requestName} numberOfLines={1}>{item.requester?.display_name || 'User'}</Text>
-        {item.requester?.unique_id && (
-          <Text style={styles.requestHandle}>@{item.requester.unique_id}</Text>
-        )}
-        <Text style={styles.requestMeta}>Wants to connect</Text>
-        <View style={styles.requestBtns}>
-          <TouchableOpacity
-            style={[styles.acceptBtn, loading === 'accept' && { opacity: 0.7 }]}
-            onPress={() => handleAccept(item.id, item.requester_id)}
-            disabled={!!loading}>
-            {loading === 'accept'
-              ? <ActivityIndicator size="small" color={C.bg} />
-              : <Text style={styles.acceptBtnText}>Accept</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rejectBtn, loading === 'reject' && { opacity: 0.7 }]}
-            onPress={() => handleReject(item.id)}
-            disabled={!!loading}>
-            {loading === 'reject'
-              ? <ActivityIndicator size="small" color={C.danger} />
-              : <Text style={styles.rejectBtnText}>Decline</Text>}
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  // ─── Render friend row ────────────────────────────────────────────────────
-  const renderFriendRow = ({ item }) => (
+  const renderFriendRow = (friend) => (
     <TouchableOpacity
-      style={[styles.friendRow, item.is_online && styles.friendRowOnline]}
-      activeOpacity={0.88}
-      onPress={() => setSelectedProfile({ ...item, isFriend: true })}>
-      {item.is_online && (
+      key={friend.user_id}
+      style={[S.friendRow, friend.is_online && S.friendRowOnline]}
+      onPress={() => setSelectedProfile({ ...friend, isFriend: true })}
+      activeOpacity={0.88}>
+      {friend.is_online && (
         <LinearGradient
-          colors={['rgba(0,255,198,0.08)', 'rgba(0,255,198,0.0)']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill} borderRadius={18} />
+          colors={['rgba(0,255,198,0.07)', 'rgba(0,255,198,0.0)']}
+          start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill} borderRadius={18}
+        />
       )}
-      <Avatar url={item.avatar_url} size={50} online={item.is_online} style={{ marginRight: 14 }} />
+      <Avatar uri={friend.avatar_url} name={friend.display_name} size={50} online={friend.is_online} style={{ marginRight: 14 }} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.friendName}>{item.display_name || 'User'}</Text>
-        <View style={styles.friendStatusRow}>
-          <View style={[styles.statusDot, { backgroundColor: item.is_online ? C.online : C.offline, marginRight: 5 }]} />
-          <Text style={[styles.friendStatus, { color: item.is_online ? C.accent : C.grey }]}>
-            {item.is_online ? 'Online now' : getRelativeTime(item.last_seen)}
+        <Text style={S.friendName}>{friend.display_name || 'User'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: friend.is_online ? C.online : C.offline, marginRight: 5 }} />
+          <Text style={{ color: friend.is_online ? C.accent : C.grey, fontSize: 12 }}>
+            {friend.is_online ? 'Online now' : relTime(friend.last_seen)}
           </Text>
         </View>
       </View>
       <TouchableOpacity
-        style={styles.msgIcon}
-        onPress={() => handleMessage(item)}>
-        <Text style={styles.msgIconText}>✉</Text>
+        style={S.msgBtn}
+        onPress={() => navigation.navigate('Chat', { friend })}>
+        <Text style={{ fontSize: 17 }}>✉️</Text>
       </TouchableOpacity>
     </TouchableOpacity>
   );
 
-  // ─── Search overlay content ───────────────────────────────────────────────
+  const renderConnectCard = ({ item }) => {
+    const sent = sentMap[item.user_id];
+    const isFriend = friends.some(f => f.user_id === item.user_id);
+    return (
+      <TouchableOpacity
+        style={S.circleCard}
+        onPress={() => setSelectedProfile({ ...item, isFriend })}
+        activeOpacity={0.88}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.04)', 'rgba(0,255,198,0.03)', 'rgba(4,12,30,0.96)']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill} borderRadius={22}
+        />
+        {item.is_online && (
+          <View style={{ position: 'absolute', top: 0, left: '10%', right: '10%', height: 1.5, backgroundColor: C.accent, opacity: 0.45, borderRadius: 1 }} />
+        )}
+        <Avatar uri={item.avatar_url} name={item.display_name} size={58} online={item.is_online} style={{ marginBottom: 10 }} />
+        <Text style={S.circleName} numberOfLines={1}>{item.display_name || 'User'}</Text>
+        <Text style={S.circleHandle} numberOfLines={1}>@{item.unique_id || 'user'}</Text>
+        <TouchableOpacity
+          style={[S.circleFollowBtn, isFriend ? S.circleFollowFriend : sent ? S.circleFollowCancel : S.circleFollowDefault]}
+          onPress={async (e) => {
+            e.stopPropagation();
+            if (isFriend) return navigation.navigate('Chat', { friend: item });
+            const uid = item.user_id;
+            try {
+              if (sent) {
+                await cancelFriendRequest(currentUserId, uid);
+                setSentMap(p => { const n = { ...p }; delete n[uid]; return n; });
+                Toast.show({ type: 'info', text1: 'Cancelled' });
+              } else {
+                await sendFriendRequest(currentUserId, uid);
+                setSentMap(p => ({ ...p, [uid]: true }));
+                Toast.show({ type: 'success', text1: '🚀 Sent!' });
+              }
+            } catch (err) {
+              Toast.show({ type: 'error', text1: err.message || 'Failed' });
+            }
+          }}>
+          <Text style={[S.circleFollowTxt, (sent && !isFriend) && { color: C.danger }, isFriend && { color: C.accent }]}>
+            {isFriend ? 'Message' : sent ? 'Cancel' : 'Follow'}
+          </Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
   const renderSearchContent = () => {
     if (searchQuery.trim()) {
       return (
-        <View style={styles.searchDropdown}>
+        <View style={S.searchDrop}>
           {searchLoading ? (
-            [0, 1, 2].map(i => <FriendRowShimmer key={i} />)
+            [0, 1, 2].map(i => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }}>
+                <Shimmer width={38} height={38} borderRadius={19} />
+                <View>
+                  <Shimmer width={120} height={13} borderRadius={6} style={{ marginBottom: 6 }} />
+                  <Shimmer width={80} height={11} borderRadius={5} />
+                </View>
+              </View>
+            ))
           ) : searchResults.length === 0 ? (
-            <Text style={styles.noResultText}>No users found for "{searchQuery}"</Text>
+            <View style={{ padding: 24, alignItems: 'center' }}>
+              <Text style={{ fontSize: 24, marginBottom: 8 }}>🔍</Text>
+              <Text style={{ color: C.grey, fontSize: 14 }}>No one found for "{searchQuery}"</Text>
+            </View>
           ) : (
             searchResults.map(u => (
-              <TouchableOpacity key={u.user_id} style={styles.searchResultRow} onPress={() => handleSelectResult(u)}>
-                <Avatar url={u.avatar_url} size={38} online={u.is_online} style={{ marginRight: 12 }} />
+              <TouchableOpacity key={u.user_id} style={S.searchRow} onPress={() => onSelectUser(u)}>
+                <Avatar uri={u.avatar_url} name={u.display_name} size={38} online={u.is_online} style={{ marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.searchResultName}>{u.display_name || 'User'}</Text>
-                  {u.unique_id && <Text style={styles.searchResultHandle}>@{u.unique_id}</Text>}
+                  <Text style={{ color: C.white, fontSize: 14, fontWeight: '600' }}>{u.display_name}</Text>
+                  {u.unique_id && <Text style={{ color: C.grey, fontSize: 12 }}>@{u.unique_id}</Text>}
                 </View>
+                {u.is_online && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.online }} />}
               </TouchableOpacity>
             ))
           )}
@@ -648,24 +971,26 @@ useEffect(() => {
     }
     if (searchHistory.length > 0) {
       return (
-        <View style={styles.searchDropdown}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.historyTitle}>Recent</Text>
-            <TouchableOpacity onPress={handleClearHistory}>
+        <View style={S.searchDrop}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
+            <Text style={{ color: C.greyLight, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' }}>Recent</Text>
+            <TouchableOpacity onPress={async () => { await clearSearchHistory(); setSearchHistory([]); }}>
               <Text style={{ color: C.accent, fontSize: 13 }}>Clear all</Text>
             </TouchableOpacity>
           </View>
           {searchHistory.map(h => (
-            <View key={h.user_id} style={styles.searchResultRow}>
-              <TouchableOpacity style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }} onPress={() => handleSelectResult(h)}>
-                <Avatar url={h.avatar_url} size={38} online={h.is_online} style={{ marginRight: 12 }} />
+            <View key={h.user_id} style={S.searchRow}>
+              <TouchableOpacity style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }} onPress={() => onSelectUser(h)}>
+                <Avatar uri={h.avatar_url} name={h.display_name} size={38} online={h.is_online} style={{ marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.searchResultName}>{h.display_name || 'User'}</Text>
-                  {h.unique_id && <Text style={styles.searchResultHandle}>@{h.unique_id}</Text>}
+                  <Text style={{ color: C.white, fontSize: 14, fontWeight: '600' }}>{h.display_name}</Text>
+                  {h.unique_id && <Text style={{ color: C.grey, fontSize: 12 }}>@{h.unique_id}</Text>}
                 </View>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleRemoveHistory(h.user_id)} style={styles.historyRemove}>
-                <Text style={{ color: C.grey, fontSize: 16 }}>×</Text>
+              <TouchableOpacity
+                onPress={async () => { await removeSearchHistoryItem(h.user_id); setSearchHistory(await fetchSearchHistory()); }}
+                style={{ padding: 8 }}>
+                <Text style={{ color: C.grey, fontSize: 18, lineHeight: 18 }}>×</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -675,128 +1000,58 @@ useEffect(() => {
     return null;
   };
 
-if (authLoading) {
-    return (
-      <View style={[styles.root, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={C.accent} />
-      </View>
-    );
-  }
-if (!isLoggedIn) {
-    return (
-      <View style={styles.root}>
-        <StatusBar barStyle="light-content" />
-        <LinearGradient colors={['#070d1a', '#0a1128', '#070d1a']} style={StyleSheet.absoluteFill} />
-        
-        {/* Decorative 3D Floating Orbs in background */}
-        <View style={styles.orb1} />
-        <View style={styles.orb2} />
-
-        <View style={styles.authContainer}>
-          <GlassCard style={styles.authGlassCard}>
-            <View style={styles.authIconCircle}>
-              <Text style={styles.authEmoji}>🌐</Text>
-            </View>
-            
-            <Text style={styles.authTitle}>Join the Network</Text>
-            <Text style={styles.authSubtitle}>
-              Connect with explorers worldwide, share your journey, and build your circle in the digital frontier.
-            </Text>
-
-            <View style={styles.authActionGap}>
-              <TouchableOpacity style={styles.googleBtn} activeOpacity={0.8}>
-                <LinearGradient 
-                  colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.05)']} 
-                  style={styles.authBtnGradient}
-                >
-                  <Text style={styles.googleBtnText}>Continue with Google</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
-                <Text style={styles.emailBtnText}>Continue with Email</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.createBtn} onPress={() => setIsLoggedIn(true)}>
-                <Text style={styles.createBtnText}>
-                  New here? <Text style={{color: C.accent}}>Create an account</Text>
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </GlassCard>
-          
-          <Text style={styles.authFooterText}>
-            By continuing, you agree to our Terms of Service.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-
-// ─── Render Circle Grid Item (2 Columns) ──────────────────────────────────
-  const renderCircleItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.circleCard} 
-      activeOpacity={0.9}
-      onPress={() => setSelectedProfile({ ...item, isFriend: true })}
-    >
-      <LinearGradient
-        colors={['rgba(255,255,255,0.05)', 'rgba(0,255,198,0.03)']}
-        style={StyleSheet.absoluteFill}
-        borderRadius={24}
-      />
-      <Avatar url={item.avatar_url} size={58} online={item.is_online} style={{ marginBottom: 12 }} />
-      <Text style={styles.circleName} numberOfLines={1}>{item.display_name || 'Explorer'}</Text>
-      <Text style={styles.circleHandle}>@{item.unique_id || 'user'}</Text>
-      
-      <TouchableOpacity style={styles.circleMsgBtn} onPress={() => handleMessage(item)}>
-        <Text style={styles.circleMsgText}>Message</Text>
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // Main render
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
-      <LinearGradient colors={['#070d1a', '#0a1128', '#070d1a']} style={styles.root}>
+      <LinearGradient colors={[C.bgDeep, '#071020', C.bgDeep]} style={{ flex: 1 }}>
 
-        {/* ── Search Bar ──────────────────────────────────────────────────── */}
-        <View style={[styles.searchBarWrap, { paddingTop: insets.top + 14 }]}>
-          <Animated.View style={[styles.searchBar, { transform: [{ scale: searchBarScale }], borderColor: searchFocused ? C.accent : C.border }]}>
+        {/* ── SEARCH BAR ────────────────────────────────────────────────── */}
+        <View style={[S.searchWrap, { paddingTop: insets.top + 12 }]}>
+          <Animated.View style={[S.searchBar, {
+            transform: [{ scale: searchScale }],
+            borderColor: searchFocused ? C.accent : C.border,
+            shadowColor: searchFocused ? C.accent : 'transparent',
+          }]}>
             <LinearGradient
-              colors={searchFocused ? ['rgba(0,255,198,0.1)', 'rgba(10,24,50,0.9)'] : ['rgba(255,255,255,0.05)', 'rgba(6,15,35,0.9)']}
+              colors={searchFocused
+                ? ['rgba(0,255,198,0.09)', 'rgba(8,20,46,0.95)']
+                : ['rgba(255,255,255,0.04)', 'rgba(4,12,30,0.95)']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={StyleSheet.absoluteFill} borderRadius={30} />
-            <Text style={[styles.searchIcon, { color: searchFocused ? C.accent : C.grey }]}>⌕</Text>
+              style={StyleSheet.absoluteFill} borderRadius={28}
+            />
+            <Text style={{ color: searchFocused ? C.accent : C.grey, fontSize: 20, marginRight: 10, lineHeight: 24 }}>⌕</Text>
             <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder="Find explorers..."
+              ref={searchRef}
+              style={{ flex: 1, color: C.white, fontSize: 15, letterSpacing: 0.2 }}
+              placeholder="Find explorers by name or @handle..."
               placeholderTextColor={C.grey}
               value={searchQuery}
               onChangeText={handleSearchChange}
-              onFocus={handleSearchFocus}
-              onBlur={handleSearchBlur}
+              onFocus={onSearchFocus}
+              onBlur={onSearchBlur}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }} style={styles.clearBtn}>
-                <Text style={{ color: C.grey, fontSize: 16 }}>×</Text>
+              <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }} style={{ padding: 4 }}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: C.white, fontSize: 12, lineHeight: 14 }}>×</Text>
+                </View>
               </TouchableOpacity>
             )}
           </Animated.View>
         </View>
 
-        {/* Search Overlay */}
+        {/* ── SEARCH OVERLAY ────────────────────────────────────────────── */}
         {searchFocused && (
           <TouchableWithoutFeedback onPress={dismissSearch}>
-            <Animated.View style={[styles.searchOverlay, { opacity: overlayOpacity }]}>
+            <Animated.View style={[StyleSheet.absoluteFillObject, { zIndex: 50, backgroundColor: 'rgba(4,9,16,0.94)', opacity: overlayAnim }]}>
               <TouchableWithoutFeedback>
-                <View style={styles.searchDropdownWrap}>
+                <View style={{ marginTop: insets.top + 74 }}>
                   {renderSearchContent()}
                 </View>
               </TouchableWithoutFeedback>
@@ -804,519 +1059,352 @@ if (!isLoggedIn) {
           </TouchableWithoutFeedback>
         )}
 
-        {/* ── Main Scroll ──────────────────────────────────────────────────── */}
+        {/* ── MAIN SCROLL ───────────────────────────────────────────────── */}
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 30 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />}>
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => { setRefreshing(true); await loadAll(); setRefreshing(false); }}
+              tintColor={C.accent}
+            />
+          }>
 
-          {/* ── Pending Requests ──────────────────────────────────────────── */}
-         {/* ── Pending Requests ──────────────────────────────────────────── */}
-{(pendingLoading || pendingRequests.length > 0) && (
-  <View style={styles.sectionWrap}>
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>Friend Requests</Text>
-      {pendingRequests.length > 0 && (
-        <TouchableOpacity onPress={() => setShowSeeAll(true)} style={styles.seeAllBtn}>
-          <LinearGradient 
-            colors={[C.accentDim, 'transparent']} 
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} 
-            style={StyleSheet.absoluteFill} 
-            borderRadius={20} 
-          />
-          <Text style={styles.seeAllText}>See All ({pendingRequests.length})</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-
-    {pendingLoading ? (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 18, gap: 12 }}>
-        {[0, 1].map(i => <RequestCardShimmer key={i} />)}
-      </ScrollView>
-    ) : (
-      <FlatList
-        data={pendingRequests}
-        renderItem={renderRequestCard}
-        keyExtractor={i => i.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingLeft: 18, paddingRight: 6, gap: 12 }}
-        snapToInterval={CARD_W + 12}
-        decelerationRate="fast"
-      />
-    )}
-  </View>
-)}
-   {/* ── 3D HYPED TAB BAR ── */}
-{!friendsLoading && (
-  <View style={styles.tabContainer}>
-    <View style={styles.tabWrapper}>
-      {/* If friends exist, show the Online count tab */}
-      {connectedFriends.length > 0 && (
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === 'active' && styles.tabBtnActive]} 
-          onPress={() => setActiveTab('active')}
-        >
-          <View style={[styles.statusDot, { backgroundColor: C.online, marginRight: 8 }]} />
-          <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
-            {sortedFriends.filter(f => f.is_online).length}/{connectedFriends.length} Online
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Circle / Connect Tab */}
-      <TouchableOpacity 
-        style={[
-          styles.tabBtn, 
-          activeTab === 'circle' && styles.tabBtnActive,
-          connectedFriends.length === 0 && { flex: 1 } // Spans full width if no friends
-        ]} 
-        onPress={() => setActiveTab('circle')}
-      >
-        <Text style={[styles.tabText, activeTab === 'circle' && styles.tabTextActive]}>
-          {connectedFriends.length === 0 ? "Find Explorers" : "My Circle"}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
-          {/* ── DYNAMIC CONTENT AREA ── */}
-          <View style={{ paddingHorizontal: 18 }}>
-            {friendsLoading ? (
-              [0, 1, 2,3].map(i => <FriendRowShimmer key={i} />)
-            ) : activeTab === 'active' ? (
-              // TAB 1: Online Only (Vertical List)
-              <View style={{ gap: 12 }}>
-                {sortedFriends.filter(f => f.is_online).map(f => renderFriendRow({ item: f }))}
-                {sortedFriends.filter(f => f.is_online).length === 0 && (
-                    <Text style={styles.emptyText}>No friends online right now.</Text>
+          {/* ── PENDING REQUESTS (only if loading or has data) ──────────── */}
+          {(pendingLoading || hasPending) && (
+            <View style={{ marginTop: 20 }}>
+              <View style={S.sectionHeader}>
+                <Text style={S.sectionTitle}>Friend Requests</Text>
+                {hasPending && (
+                  <View style={S.countBadge}>
+                    <Text style={{ color: C.accent, fontSize: 12, fontWeight: '800' }}>{pendingReqs.length}</Text>
+                  </View>
                 )}
               </View>
-            ) : (
-              // TAB 2: My Circle (2-Column Production Grid)
-             {/* TAB 2: My Circle Grid */}
-<FlatList
-  data={sortedFriends}
-  renderItem={renderCircleItem}
-  keyExtractor={i => i.user_id}
-  numColumns={2}
-  scrollEnabled={false}
-  columnWrapperStyle={{ gap: 14, marginBottom: 14 }}
-  ListEmptyComponent={
-    <GlassCard style={styles.emptyGridCard}>
-      <Text style={styles.authEmoji}>🌌</Text>
-      <Text style={styles.emptyTitle}>Your Galaxy is Quiet</Text>
-      <Text style={styles.emptyText}>Start following people to build your circle.</Text>
-      <TouchableOpacity 
-        style={styles.exploreBtn} 
-        onPress={() => setShowSeeAll(true)}
-      >
-        <Text style={styles.exploreBtnText}>Explore Now</Text>
-      </TouchableOpacity>
-    </GlassCard>
-  }
-/>
+              {pendingLoading ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 18, gap: 12 }}>
+                  <RequestShimmer /><RequestShimmer />
+                </ScrollView>
+              ) : (
+                <FlatList
+                  data={pendingReqs}
+                  renderItem={renderRequestCard}
+                  keyExtractor={i => i.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingLeft: 18, paddingRight: 6, gap: 12 }}
+                  snapToInterval={CARD_W + 12}
+                  decelerationRate="fast"
+                />
+              )}
+            </View>
+          )}
+
+          {/* ── TAB BAR ───────────────────────────────────────────────────── */}
+          <View style={S.tabWrap}>
+            {!onlyConnect && (
+              <TouchableOpacity
+                style={[S.tabBtn, activeTab === 'friends' && S.tabBtnActive]}
+                onPress={() => switchTab('friends')}>
+                {activeTab === 'friends' && (
+                  <LinearGradient colors={[C.accentDim, 'rgba(0,255,198,0.04)']} style={StyleSheet.absoluteFill} borderRadius={16} />
+                )}
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.online, marginRight: 7 }} />
+                <Text style={[S.tabTxt, activeTab === 'friends' && S.tabTxtActive]}>
+                  {friendsLoading ? 'Friends' : `${onlineCount}/${friends.length} Online`}
+                </Text>
+              </TouchableOpacity>
             )}
+            <TouchableOpacity
+              style={[S.tabBtn, activeTab === 'connect' && S.tabBtnActive, onlyConnect && { flex: 1 }]}
+              onPress={() => switchTab('connect')}>
+              {activeTab === 'connect' && (
+                <LinearGradient colors={[C.accentDim, 'rgba(0,255,198,0.04)']} style={StyleSheet.absoluteFill} borderRadius={16} />
+              )}
+              <Text style={[S.tabTxt, activeTab === 'connect' && S.tabTxtActive]}>
+                {onlyConnect ? '🌌  Find Explorers' : 'Connect'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
+          {/* ── TAB CONTENT ───────────────────────────────────────────────── */}
+          <View style={{ paddingHorizontal: 14, marginTop: 4 }}>
+
+            {activeTab === 'friends' && (
+              friendsLoading ? (
+                <View style={{ gap: 10 }}>
+                  {[0, 1, 2, 3].map(i => <FriendShimmer key={i} />)}
+                </View>
+              ) : sortedFriends.length === 0 ? (
+                // No friends - redirect to connect tab
+                <View style={{ alignItems: 'center', paddingTop: 20, paddingBottom: 10 }}>
+                  <Text style={{ fontSize: 40, marginBottom: 12 }}>🌌</Text>
+                  <Text style={{ color: C.white, fontSize: 17, fontWeight: '800', marginBottom: 8 }}>Your galaxy is quiet</Text>
+                  <Text style={{ color: C.grey, fontSize: 14, textAlign: 'center', marginBottom: 20, lineHeight: 21 }}>
+                    Start following people to build your circle
+                  </Text>
+                  <TouchableOpacity
+                    style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 20, backgroundColor: C.accent, shadowColor: C.accent, shadowOpacity: 0.5, shadowRadius: 12 }}
+                    onPress={() => switchTab('connect')}>
+                    <Text style={{ color: C.bg, fontWeight: '900', fontSize: 14 }}>Explore People</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ gap: 10 }}>
+                  {/* Online section label */}
+                  {onlineCount > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4, marginTop: 4 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.online, marginRight: 8 }} />
+                      <Text style={{ color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                        Active Now · {onlineCount}
+                      </Text>
+                    </View>
+                  )}
+                  {sortedFriends.filter(f => f.is_online).map(f => renderFriendRow(f))}
+
+                  {/* Offline section label */}
+                  {sortedFriends.filter(f => !f.is_online).length > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 4 }}>
+                      <View style={{ flex: 1, height: 1, backgroundColor: C.border, marginRight: 10 }} />
+                      <Text style={{ color: C.grey, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' }}>Offline</Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: C.border, marginLeft: 10 }} />
+                    </View>
+                  )}
+                  {sortedFriends.filter(f => !f.is_online).map(f => renderFriendRow(f))}
+                </View>
+              )
+            )}
+
+            {activeTab === 'connect' && (
+              friendsLoading ? (
+                <View style={{ gap: 0 }}>
+                  <GridShimmer /><GridShimmer /><GridShimmer />
+                </View>
+              ) : (
+                <FlatList
+                  data={[...friends, ...MOCK_PROFILES.filter(p => !friends.some(f => f.user_id === p.user_id))]}
+                  renderItem={renderConnectCard}
+                  keyExtractor={i => i.user_id}
+                  numColumns={2}
+                  scrollEnabled={false}
+                  columnWrapperStyle={{ gap: 12, marginBottom: 12 }}
+                  ListHeaderComponent={() => (
+                    <TouchableOpacity
+                      style={[S.exploreAllBtn]}
+                      onPress={() => setShowConnect(true)}>
+                      <LinearGradient colors={[C.accentDim, 'rgba(0,255,198,0.04)']} style={StyleSheet.absoluteFill} borderRadius={16} />
+                      <Text style={{ color: C.accent, fontSize: 14, fontWeight: '700' }}>🔭  Explore All People</Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={
+                    <View style={{ alignItems: 'center', paddingTop: 30 }}>
+                      <ActivityIndicator color={C.accent} />
+                    </View>
+                  }
+                />
+              )
+            )}
+          </View>
         </ScrollView>
 
-        {/* ── Profile Modal ─────────────────────────────────────────────── */}
+        {/* ── PROFILE MODAL ─────────────────────────────────────────────── */}
         <ProfileModal
           visible={!!selectedProfile}
           profile={selectedProfile}
           onClose={() => setSelectedProfile(null)}
-          currentUserId={currentUserId.current}
-          onFollowToggle={handleFollowToggle}
+          onAction={handleProfileAction}
+          isFriend={selectedProfile?.isFriend}
+          requestSent={selectedProfile ? !!sentMap[selectedProfile.user_id] : false}
+          actionLoading={profileActionLoading}
         />
 
-        {/* ── See All Modal ─────────────────────────────────────────────── */}
-        <SeeAllModal
-          visible={showSeeAll}
-          onClose={() => setShowSeeAll(false)}
-          currentUserId={currentUserId.current}
+        {/* ── CONNECT SHEET ─────────────────────────────────────────────── */}
+        <ConnectSheet
+          visible={showConnect}
+          onClose={() => setShowConnect(false)}
+          currentUserId={currentUserId}
+          sentIds={sentMap}
+          onSentChange={setSentMap}
         />
 
-        <Toast />
+        <Toast
+          config={{
+            success: ({ text1 }) => (
+              <View style={{ backgroundColor: 'rgba(0,255,198,0.1)', borderWidth: 1, borderColor: C.accentMid, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12, marginHorizontal: 14 }}>
+                <Text style={{ color: C.accent, fontWeight: '700', fontSize: 14 }}>{text1}</Text>
+              </View>
+            ),
+            error: ({ text1 }) => (
+              <View style={{ backgroundColor: C.dangerDim, borderWidth: 1, borderColor: C.danger, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12, marginHorizontal: 14 }}>
+                <Text style={{ color: C.danger, fontWeight: '700', fontSize: 14 }}>{text1}</Text>
+              </View>
+            ),
+            info: ({ text1 }) => (
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12, marginHorizontal: 14 }}>
+                <Text style={{ color: C.greyLight, fontWeight: '600', fontSize: 14 }}>{text1}</Text>
+              </View>
+            ),
+          }}
+        />
       </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-
+// ─────────────────────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────────────────────
+const S = StyleSheet.create({
   // Search
-  searchBarWrap: { paddingHorizontal: 18, paddingBottom: 10, zIndex: 20 },
+  searchWrap: { paddingHorizontal: 16, paddingBottom: 8, zIndex: 20 },
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
-    height: 52, borderRadius: 30,
-    borderWidth: 1.5, borderColor: C.border,
-    paddingHorizontal: 18, overflow: 'hidden',
-    shadowColor: C.accent, shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    height: 52, borderRadius: 28, borderWidth: 1.5,
+    paddingHorizontal: 16, overflow: 'hidden',
+    shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
   },
-  searchIcon: { fontSize: 22, marginRight: 10 },
-  searchInput: { flex: 1, color: C.white, fontSize: 15, letterSpacing: 0.3 },
-  clearBtn: { padding: 4 },
-  searchOverlay: {
-    ...StyleSheet.absoluteFillObject, zIndex: 15,
-    backgroundColor: 'rgba(7,13,26,0.92)',
-  },
-  searchDropdownWrap: {
-    marginTop: 0, paddingTop: 110, // below search bar
-  },
-  searchDropdown: {
-    marginHorizontal: 14, backgroundColor: 'rgba(10,24,50,0.98)',
+  searchDrop: {
+    marginHorizontal: 12,
+    backgroundColor: 'rgba(8,20,46,0.97)',
     borderRadius: 18, borderWidth: 1, borderColor: C.border,
-    overflow: 'hidden', paddingVertical: 6,
-    shadowColor: C.accent, shadowOpacity: 0.15, shadowRadius: 18,
+    overflow: 'hidden', paddingVertical: 4,
+    shadowColor: C.accent, shadowOpacity: 0.15, shadowRadius: 20,
   },
-  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
-  historyTitle: { color: C.greyLight, fontSize: 13, fontWeight: '700', letterSpacing: 1 },
-  historyRemove: { padding: 8 },
-  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
-  searchResultName: { color: C.white, fontSize: 14, fontWeight: '600' },
-  searchResultHandle: { color: C.grey, fontSize: 12 },
-  noResultText: { color: C.grey, textAlign: 'center', padding: 24, fontSize: 14 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11 },
 
   // Section
-  sectionWrap: { marginTop: 22 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
-  sectionTitle: { color: C.white, fontSize: 17, fontWeight: '700', letterSpacing: 0.3 },
-  seeAllBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: C.border },
-  seeAllText: { color: C.accent, fontSize: 13, fontWeight: '600' },
-
-  // Glass card
-  glassCard: {
-    borderRadius: 18, borderWidth: 1, borderColor: C.border,
-    backgroundColor: C.bgCard, overflow: 'hidden',
-    shadowColor: C.accent, shadowOpacity: 0.08, shadowRadius: 12,
-  },
-  glassCardGlow: { borderColor: C.borderGlow, shadowOpacity: 0.22 },
-  glassInner: { padding: 16 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14, gap: 10 },
+  sectionTitle: { color: C.white, fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accentMid },
 
   // Request card
-  requestCard: {
+  reqCard: {
     borderRadius: 20, borderWidth: 1.5, borderColor: C.border,
-    padding: 20, overflow: 'hidden',
-    backgroundColor: C.bgCard,
-    shadowColor: C.accent, shadowOpacity: 0.14, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    padding: 20, overflow: 'hidden', backgroundColor: C.card,
+    shadowColor: C.accent, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  requestCardGlowBorder: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-    backgroundColor: C.accent, opacity: 0.35, borderRadius: 1,
-  },
-  requestName: { color: C.white, fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 2 },
-  requestHandle: { color: C.accent, fontSize: 12, textAlign: 'center', marginBottom: 4 },
-  requestMeta: { color: C.grey, fontSize: 12, textAlign: 'center', marginBottom: 16 },
-  requestBtns: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  reqName: { color: C.white, fontSize: 15, fontWeight: '800', textAlign: 'center', marginBottom: 3 },
+  reqHandle: { color: C.accent, fontSize: 12, textAlign: 'center', marginBottom: 4 },
+  reqMeta: { color: C.grey, fontSize: 12, textAlign: 'center', marginBottom: 18 },
+  reqBtns: { flexDirection: 'row', gap: 10 },
   acceptBtn: {
-    flex: 1, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: C.accent,
-    shadowColor: C.accent, shadowOpacity: 0.45, shadowRadius: 10,
+    flex: 1, height: 40, borderRadius: 20,
+    backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: C.accent, shadowOpacity: 0.5, shadowRadius: 10,
   },
-  acceptBtnText: { color: C.bg, fontSize: 13, fontWeight: '800' },
-  rejectBtn: {
-    flex: 1, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: C.danger, backgroundColor: C.dangerDim,
+  acceptTxt: { color: C.bg, fontWeight: '900', fontSize: 13 },
+  declineBtn: {
+    flex: 1, height: 40, borderRadius: 20,
+    backgroundColor: C.dangerDim, borderWidth: 1.5, borderColor: C.danger,
+    alignItems: 'center', justifyContent: 'center',
   },
-  rejectBtnText: { color: C.danger, fontSize: 13, fontWeight: '700' },
+  declineTxt: { color: C.danger, fontWeight: '700', fontSize: 13 },
 
-  // Avatar
-  avatarWrap: { borderWidth: 2, overflow: 'hidden', backgroundColor: '#0d1a30' },
-  pulseRing: {
-    position: 'absolute', borderWidth: 2, borderColor: C.accent, opacity: 0.4,
+  // Tab
+  tabWrap: {
+    flexDirection: 'row', marginHorizontal: 16, marginTop: 24, marginBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.025)', borderRadius: 18,
+    padding: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
-  onlineDot: { position: 'absolute', width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: C.bg },
+  tabBtn: {
+    flex: 1, height: 44, borderRadius: 15,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tabBtnActive: {
+    borderWidth: 1, borderColor: C.accentMid,
+    shadowColor: C.accent, shadowOpacity: 0.18, shadowRadius: 8,
+  },
+  tabTxt: { color: C.grey, fontSize: 13, fontWeight: '700' },
+  tabTxtActive: { color: C.accent },
 
   // Friend row
   friendRow: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: 18, borderWidth: 1, borderColor: C.border,
-    backgroundColor: C.bgCard, padding: 12, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8,
+    backgroundColor: C.card, padding: 12, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8,
   },
-  friendRowOnline: { borderColor: 'rgba(0,255,198,0.32)', shadowColor: C.accent, shadowOpacity: 0.1 },
-  friendName: { color: C.white, fontSize: 14, fontWeight: '700', marginBottom: 3 },
-  friendStatusRow: { flexDirection: 'row', alignItems: 'center' },
-  friendStatus: { fontSize: 12 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  msgIcon: {
+  friendRowOnline: { borderColor: 'rgba(0,255,198,0.28)', shadowColor: C.accent, shadowOpacity: 0.08 },
+  friendName: { color: C.white, fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  msgBtn: {
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(0,255,198,0.1)', borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  msgIconText: { fontSize: 16, color: C.accent },
 
-  // Status
-  onlineBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: 20, backgroundColor: 'rgba(0,255,198,0.08)',
-    borderWidth: 1, borderColor: 'rgba(0,255,198,0.22)',
+  // Circle grid
+  circleCard: {
+    flex: 1, borderRadius: 22, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.card, padding: 16, alignItems: 'center', overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, elevation: 8,
+    minHeight: 200,
   },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
-  statusText: { fontSize: 12, fontWeight: '600' },
+  circleName: { color: C.white, fontSize: 14, fontWeight: '800', marginBottom: 2, textAlign: 'center' },
+  circleHandle: { color: C.grey, fontSize: 11, marginBottom: 14, textAlign: 'center' },
+  circleFollowBtn: { width: '100%', height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  circleFollowDefault: { backgroundColor: C.accent, shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 8 },
+  circleFollowCancel: { backgroundColor: C.dangerDim, borderWidth: 1, borderColor: C.danger },
+  circleFollowFriend: { backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accentMid },
+  circleFollowTxt: { color: C.bg, fontSize: 12, fontWeight: '900' },
 
-  // Empty
-  emptyCard: { marginHorizontal: 18, padding: 24, alignItems: 'center' },
-  emptyText: { color: C.grey, fontSize: 14, textAlign: 'center' },
-  exploreBtn: {
-    marginTop: 12, paddingHorizontal: 20, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1, borderColor: C.accent,
-    backgroundColor: C.accentDim,
+  // Explore all btn
+  exploreAllBtn: {
+    height: 48, borderRadius: 16, borderWidth: 1, borderColor: C.accentMid,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16, overflow: 'hidden',
   },
 
-  // Profile Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  // Profile modal
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.78)', justifyContent: 'center', alignItems: 'center', padding: 22 },
   profileModal: {
-    width: '100%', borderRadius: 28,
-    borderWidth: 1.5, borderColor: C.border, overflow: 'hidden',
-    shadowColor: C.accent, shadowOpacity: 0.3, shadowRadius: 30,
+    width: '100%', borderRadius: 28, borderWidth: 1.5, borderColor: C.border,
+    overflow: 'hidden', alignItems: 'center', paddingBottom: 28,
+    shadowColor: C.accent, shadowOpacity: 0.25, shadowRadius: 30,
   },
-  profileModalInner: { padding: 28, alignItems: 'center' },
-  modalGlowLine: { position: 'absolute', top: 0, left: 40, right: 40, height: 2, backgroundColor: C.accent, opacity: 0.5, borderRadius: 1 },
-  modalName: { color: C.white, fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
-  modalHandle: { color: C.accent, fontSize: 13, marginBottom: 12 },
-  modalStatusRow: { marginBottom: 18 },
-  modalDivider: { width: '80%', height: 1, backgroundColor: C.border, marginBottom: 18 },
-  modalBtn: {
-    width: '100%', height: 44, borderRadius: 22,
+  modalName: { color: C.white, fontSize: 21, fontWeight: '900', textAlign: 'center', marginBottom: 4 },
+  modalHandle: { color: C.accent, fontSize: 13, marginBottom: 14 },
+  modalStatusPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 14, borderWidth: 1 },
+  modalActionBtn: {
+    width: '85%', height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, marginBottom: 12,
+    borderWidth: 1.5, marginBottom: 4,
+    shadowColor: C.accent, shadowOpacity: 0.25, shadowRadius: 12,
   },
-  modalBtnText: { fontSize: 14, fontWeight: '700' },
-  modalClose: { paddingVertical: 6 },
 
-  // See All Sheet
-  seeAllOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
-  seeAllSheet: {
+  // Connect sheet
+  sheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: SCREEN_H * 0.88, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    height: H * 0.9, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     overflow: 'hidden', borderWidth: 1, borderColor: C.border,
   },
-  seeAllHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
-  seeAllHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
-  seeAllTitle: { color: C.white, fontSize: 18, fontWeight: '800' },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginTop: 14, marginBottom: 2 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
+  sheetTitle: { color: C.white, fontSize: 19, fontWeight: '900' },
+  sheetSearch: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginBottom: 8,
+    height: 44, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14,
+  },
 
-  // Explore cards
+  // Explore card inside sheet
   exploreCard: {
-    flex: 1, borderRadius: 18, borderWidth: 1, borderColor: C.border,
+    flex: 1, borderRadius: 20, borderWidth: 1, borderColor: C.border,
     padding: 16, alignItems: 'center', overflow: 'hidden',
-    backgroundColor: C.bgCard,
-    shadowColor: C.accent, shadowOpacity: 0.1, shadowRadius: 12,
+    backgroundColor: C.card, minHeight: 185,
+    shadowColor: C.accent, shadowOpacity: 0.08, shadowRadius: 12,
   },
-  exploreCardName: { color: C.white, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 2 },
-  exploreCardHandle: { color: C.grey, fontSize: 11, textAlign: 'center', marginBottom: 10 },
-  exploreFollowBtn: {
-    paddingHorizontal: 20, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: C.accent,
-    shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 8,
-  },
-  exploreFollowText: { color: C.bg, fontSize: 12, fontWeight: '800' },
-  exploreCancelBtn: { backgroundColor: C.dangerDim, borderWidth: 1, borderColor: C.danger, shadowOpacity: 0 },
-  // AUTH STYLES
-  authContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    zIndex: 10,
-  },
-  authGlassCard: {
-    padding: 32,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)', // Thin glass
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    shadowColor: C.accent,
-    shadowOpacity: 0.2,
-    shadowRadius: 40,
-    elevation: 20,
-  },
-  authIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 255, 198, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: C.accentDim,
-  },
-  authEmoji: { fontSize: 32 },
-  authTitle: {
-    color: C.white,
-    fontSize: 28,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 0.5,
-  },
-  authSubtitle: {
-    color: C.grey,
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-    paddingHorizontal: 10,
-  },
-  authActionGap: { width: '100%', gap: 16 },
-  googleBtn: {
-    width: '100%',
-    height: 54,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  authBtnGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  googleBtnText: { color: C.white, fontWeight: '700', fontSize: 16 },
-  emailBtn: {
-    width: '100%',
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: C.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: C.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  emailBtnText: { color: C.bg, fontWeight: '800', fontSize: 16 },
-  createBtn: { marginTop: 12, alignItems: 'center' },
-  createBtnText: { color: C.grey, fontSize: 14, fontWeight: '600' },
-  authFooterText: {
-    color: 'rgba(138, 155, 181, 0.5)',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 24,
-  },
-  // Floating Orbs
-  orb1: {
-    position: 'absolute',
-    top: '15%',
-    right: '-10%',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: C.accent,
-    opacity: 0.05,
-  },
-  orb2: {
-    position: 'absolute',
-    bottom: '10%',
-    left: '-20%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: C.purple,
-    opacity: 0.05,
-},
-  tabContainer: {
-    paddingHorizontal: 18,
-    marginTop: 24,
-    marginBottom: 20,
-  },
-  tabWrapper: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 20,
-    padding: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  tabBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBtnActive: {
-    backgroundColor: 'rgba(0, 255, 198, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 255, 198, 0.2)',
-    shadowColor: C.accent,
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-  },
-  tabText: {
-    color: C.grey,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tabTextActive: {
-    color: C.accent,
-  },
-
-  // Circle Grid Styles (2 Columns)
-  circleCard: {
-    flex: 1,
-    height: 200,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 255, 198, 0.15)',
-    backgroundColor: 'rgba(10, 24, 50, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  circleName: {
-    color: C.white,
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  circleHandle: {
-    color: C.grey,
-    fontSize: 11,
-    marginBottom: 16,
-  },
-  circleMsgBtn: {
-    width: '100%',
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: C.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: C.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-  },emptyGridCard: {
-    marginTop: 20,
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderStyle: 'dashed',
-  },
-  emptyTitle: {
-    color: C.white,
-    fontSize: 18,
-    fontWeight: '800',
-    marginTop: 12,
-  },
-  exploreBtnText: {
-    color: C.accent,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  circleMsgText: {
-    color: C.bg,
-    fontSize: 12,
-    fontWeight: '800',
-  });
+  exploreCardName: { color: C.white, fontSize: 13, fontWeight: '800', textAlign: 'center', marginBottom: 2 },
+  exploreCardHandle: { color: C.grey, fontSize: 11, textAlign: 'center', marginBottom: 12 },
+  followBtn: { width: '100%', height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  followBtnFollow: { backgroundColor: C.accent, shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 8 },
+  followBtnCancel: { backgroundColor: C.dangerDim, borderWidth: 1, borderColor: C.danger },
+  followBtnText: { color: C.bg, fontSize: 12, fontWeight: '900' },
+});
