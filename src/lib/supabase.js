@@ -678,3 +678,364 @@ export const clearSearchHistory = async () => {
   try { await AsyncStorage.removeItem(HISTORY_KEY); }
   catch (e) { console.warn('[clearSearchHistory]', e.message); }
 };
+// ═══════════════════════════════════════════════════════════════════════════
+// ADD THESE EXPORTS TO YOUR EXISTING src/lib/supabase.js FILE
+// Place after the existing exports at the bottom of the file
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── PROFILE API ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the current user's full profile from the profiles table.
+ * Returns null if not found (caller should show empty state or create profile).
+ *
+ * @param {string} userId
+ */
+export const fetchMyProfile = async (userId) => {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('user_id, display_name, avatar_url, unique_id, is_online, last_seen, bio, subscription_tier, top_genres, created_at')
+    .eq('user_id', userId)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') return null; // Not found → graceful
+    console.warn('[fetchMyProfile]', error.message);
+    return null;
+  }
+  return data;
+};
+
+/**
+ * Update profile fields for the current user.
+ * Performs an upsert so it works even if the row doesn't exist yet.
+ *
+ * @param {string} userId
+ * @param {object} updates  - Partial profile fields: { display_name, bio, avatar_url, ... }
+ */
+export const updateProfile = async (userId, updates) => {
+  if (!userId) throw new Error('No user ID');
+  const { error } = await supabase
+    .from('profiles')
+    .upsert(
+      { user_id: userId, ...updates, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+  if (error) throw error;
+};
+
+/**
+ * Upload a profile avatar to Supabase Storage and return the public URL.
+ * Bucket name: 'avatars' — create this in your Supabase dashboard if it doesn't exist.
+ * Set the bucket to PUBLIC for URLs to work without auth.
+ *
+ * @param {string} userId
+ * @param {string} localUri - Local file URI from image picker
+ * @returns {string} Public URL of the uploaded avatar
+ */
+export const uploadAvatar = async (userId, localUri) => {
+  if (!userId || !localUri) throw new Error('Missing params');
+
+  // Build a FormData blob for RN upload
+  const ext  = localUri.split('.').pop()?.toLowerCase() || 'jpg';
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const path = `${userId}/avatar.${ext}`;
+
+  // React Native fetch-based upload (works without Node.js fs)
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(path, blob, { contentType: mime, upsert: true });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  // Bust cache by appending timestamp
+  return `${data.publicUrl}?t=${Date.now()}`;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── PROFILE STATS ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Aggregate profile stats in a single optimized call.
+ * Returns: { followers, following, watch_time_hours, rating_count, watchlist_count }
+ *
+ * All counts come from a single Promise.all to minimize latency.
+ *
+ * @param {string} userId
+ */
+export const fetchMyStats = async (userId) => {
+  if (!userId) return null;
+
+  try {
+    const [followers, following, watchTime, ratingCount, watchlistCount] = await Promise.all([
+      // Followers: friendships where this user is addressee + accepted
+      supabase
+        .from('friendships')
+        .select('id', { count: 'exact', head: true })
+        .eq('addressee_id', userId)
+        .eq('status', 'accepted'),
+
+      // Following: friendships where this user is requester + accepted
+      supabase
+        .from('friendships')
+        .select('id', { count: 'exact', head: true })
+        .eq('requester_id', userId)
+        .eq('status', 'accepted'),
+
+      // Total watch time in seconds from watch_progress
+      supabase
+        .from('watch_progress')
+        .select('current_time_sec')
+        .eq('user_id', userId),
+
+      // Number of movies rated
+      supabase
+        .from('movie_ratings')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId),
+
+      // Watchlist size
+      supabase
+        .from('watchlist')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId),
+    ]);
+
+    // Sum watch time seconds → hours
+    const totalSecs = (watchTime.data || []).reduce((acc, r) => acc + (r.current_time_sec || 0), 0);
+    const watch_time_hours = Math.floor(totalSecs / 3600);
+
+    return {
+      followers:         followers.count  ?? 0,
+      following:         following.count  ?? 0,
+      watch_time_hours,
+      rating_count:      ratingCount.count ?? 0,
+      watchlist_count:   watchlistCount.count ?? 0,
+    };
+  } catch (e) {
+    console.warn('[fetchMyStats]', e.message);
+    return { followers: 0, following: 0, watch_time_hours: 0, rating_count: 0, watchlist_count: 0 };
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── RATED / LIKED MOVIES ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch movies the user has rated (liked).
+ * Joins movie_ratings → movies to get poster/title.
+ * Ordered by rating desc, then by date desc.
+ *
+ * @param {string} userId
+ * @param {number} limit
+ */
+export const fetchMyRatedMovies = async (userId, limit = 20) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('movie_ratings')
+    .select(`
+      id,
+      rating,
+      created_at,
+      movies (
+        id,
+        title,
+        poster,
+        genre,
+        year,
+        is_series
+      )
+    `)
+    .eq('user_id', userId)
+    .order('rating', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) { console.warn('[fetchMyRatedMovies]', error.message); return []; }
+
+  return (data ?? [])
+    .filter(r => r.movies) // drop orphaned ratings
+    .map(r => ({
+      id:        r.movies.id,
+      title:     r.movies.title,
+      poster:    r.movies.poster,
+      genre:     r.movies.genre,
+      year:      r.movies.year,
+      is_series: r.movies.is_series,
+      rating:    r.rating,
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── WATCHLIST FOR PROFILE ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch watchlist movies for the profile screen (lightweight).
+ * Re-uses the existing watchlist table join pattern.
+ *
+ * @param {string} userId
+ * @param {number} limit
+ */
+export const fetchMyWatchlist = async (userId, limit = 20) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('watchlist')
+    .select(`
+      id,
+      created_at,
+      movies (
+        id,
+        title,
+        poster,
+        genre,
+        year,
+        rating,
+        is_series
+      )
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) { console.warn('[fetchMyWatchlist]', error.message); return []; }
+
+  return (data ?? [])
+    .filter(r => r.movies)
+    .map(r => ({
+      id:        r.movies.id,
+      title:     r.movies.title,
+      poster:    r.movies.poster,
+      genre:     r.movies.genre,
+      year:      r.movies.year,
+      rating:    r.movies.rating,
+      is_series: r.movies.is_series,
+      watchId:   r.id,
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── CONTINUE WATCHING FOR PROFILE ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch in-progress movies for the profile screen.
+ * Reuses the existing watch_progress table join.
+ * Filters out items that are fully watched (progress >= 95%).
+ *
+ * @param {string} userId
+ * @param {number} limit
+ */
+export const fetchMyContinueWatching = async (userId, limit = 20) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('watch_progress')
+    .select(`
+      id,
+      current_time_sec,
+      duration_sec,
+      season_number,
+      episode_number,
+      last_watched,
+      movies (
+        id,
+        title,
+        poster,
+        genre,
+        is_series
+      )
+    `)
+    .eq('user_id', userId)
+    .order('last_watched', { ascending: false })
+    .limit(limit);
+
+  if (error) { console.warn('[fetchMyContinueWatching]', error.message); return []; }
+
+  const _fmtRemaining = (cur, dur) => {
+    const rem = Math.max(dur - cur, 0);
+    const m   = Math.floor(rem / 60);
+    const h   = Math.floor(m / 60);
+    return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+  };
+
+  return (data ?? [])
+    .filter(r => {
+      if (!r.movies) return false;
+      // Skip fully-watched items (>= 95%)
+      const pct = r.duration_sec > 0 ? r.current_time_sec / r.duration_sec : 0;
+      return pct < 0.95;
+    })
+    .map(r => ({
+      movieId:    r.movies.id,
+      id:         r.movies.id,
+      title:      r.movies.title,
+      poster:     r.movies.poster,
+      genre:      r.movies.genre,
+      is_series:  r.movies.is_series,
+      progress:   r.duration_sec > 0 ? r.current_time_sec / r.duration_sec : 0,
+      currentSec: r.current_time_sec,
+      durationSec: r.duration_sec,
+      season:     r.season_number,
+      episode:    r.episode_number,
+      remaining:  _fmtRemaining(r.current_time_sec, r.duration_sec),
+      lastWatched: r.last_watched,
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── TOP GENRES HELPER ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compute the user's top genres from their watch history + ratings.
+ * Call this once after loading and persist to profile.top_genres via updateProfile.
+ *
+ * @param {string} userId
+ * @returns {string[]} Top 5 genres sorted by frequency
+ */
+export const computeTopGenres = async (userId) => {
+  if (!userId) return [];
+  try {
+    // Pull genres from rated movies
+    const { data: rated } = await supabase
+      .from('movie_ratings')
+      .select('movies(genre)')
+      .eq('user_id', userId)
+      .limit(50);
+
+    // Pull genres from watch history
+    const { data: watched } = await supabase
+      .from('watch_progress')
+      .select('movies(genre)')
+      .eq('user_id', userId)
+      .limit(50);
+
+    const freqMap = {};
+    const addGenres = (rows) => {
+      (rows || []).forEach(r => {
+        (r.movies?.genre || []).forEach(g => {
+          freqMap[g] = (freqMap[g] || 0) + 1;
+        });
+      });
+    };
+
+    addGenres(rated);
+    addGenres(watched);
+
+    return Object.entries(freqMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([genre]) => genre);
+  } catch (e) {
+    console.warn('[computeTopGenres]', e.message);
+    return [];
+  }
+};
