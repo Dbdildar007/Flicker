@@ -48,15 +48,15 @@ const rs = (s) => {
 
 const getLayout = () => {
   const { width: W } = Dimensions.get('window');
-  const COLS    = 3;
-  const H_PAD   = rs(14);
-  const GAP     = rs(9);
-  const CARD_W  = (W - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
-  const CARD_H  = CARD_W * 1.52;
+  const COLS = 3;
+  const H_PAD = rs(14);
+  const GAP = rs(9);
+  const CARD_W = (W - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
+  const CARD_H = CARD_W * 1.52;
   return { COLS, H_PAD, GAP, CARD_W, CARD_H, W };
 };
 
-const PAGE_SIZE   = 24; // divisible by 3 — keeps rows clean
+const PAGE_SIZE = 24; // divisible by 3 — keeps rows clean
 const HISTORY_KEY = '@flicks_search_history';
 const MAX_HISTORY = 12;
 
@@ -140,7 +140,7 @@ const MovieCard = memo(({ item, onPress }) => {
   const { CARD_W, CARD_H } = getLayout();
   const scaleA = useRef(new Animated.Value(1)).current;
 
-  const onIn  = useCallback(() =>
+  const onIn = useCallback(() =>
     Animated.spring(scaleA, { toValue: 0.93, useNativeDriver: true, tension: 320, friction: 10 }).start(), []);
   const onOut = useCallback(() =>
     Animated.spring(scaleA, { toValue: 1, useNativeDriver: true, tension: 320, friction: 10 }).start(), []);
@@ -239,7 +239,7 @@ const MovieCard = memo(({ item, onPress }) => {
 // ─── Filter Chip ─────────────────────────────────────────────────────────────
 const FilterChip = memo(({ label, active, onPress }) => {
   const scaleA = useRef(new Animated.Value(1)).current;
-  const onIn  = () => Animated.spring(scaleA, { toValue: 0.90, useNativeDriver: true, tension: 380, friction: 10 }).start();
+  const onIn = () => Animated.spring(scaleA, { toValue: 0.90, useNativeDriver: true, tension: 380, friction: 10 }).start();
   const onOut = () => Animated.spring(scaleA, { toValue: 1, useNativeDriver: true, tension: 380, friction: 10 }).start();
 
   return (
@@ -353,33 +353,33 @@ export default function SearchScreen({ navigation }) {
   const { H_PAD, GAP, CARD_W, CARD_H } = getLayout();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [results,     setResults]     = useState([]);
+  const [results, setResults] = useState([]);
   const [defaultList, setDefaultList] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [searching,   setSearching]   = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error,       setError]       = useState('');
-  const [history,     setHistory]     = useState([]);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [page,        setPage]        = useState(0);
+  const [error, setError] = useState('');
+  const [history, setHistory] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
 
   // Filter options (from DB)
-  const [availYears,  setAvailYears]  = useState([]);
-  const [availLangs,  setAvailLangs]  = useState([]);
+  const [availYears, setAvailYears] = useState([]);
+  const [availLangs, setAvailLangs] = useState([]);
   const [availGenres, setAvailGenres] = useState([]);
-  const [selYears,    setSelYears]    = useState([]);
-  const [selLangs,    setSelLangs]    = useState([]);
-  const [selGenres,   setSelGenres]   = useState([]);
+  const [selYears, setSelYears] = useState([]);
+  const [selLangs, setSelLangs] = useState([]);
+  const [selGenres, setSelGenres] = useState([]);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState(''); // Add this
 
   const debounceRef = useRef(null);
-  const inputRef    = useRef(null);
-  const listRef     = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
 
   const isSearchMode = query.length > 0 || selYears.length > 0 || selLangs.length > 0 || selGenres.length > 0;
-  const displayData  = isSearchMode ? results : defaultList;
-  const gridRows     = useMemo(() => chunkIntoRows(displayData, 3), [displayData]);
+  const displayData = isSearchMode ? results : defaultList;
+  const gridRows = useMemo(() => chunkIntoRows(displayData, 3), [displayData]);
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -451,7 +451,7 @@ export default function SearchScreen({ navigation }) {
 
   // ── Search ─────────────────────────────────────────────────────────────────
   const performSearch = useCallback(async (q, years, langs, genres, pg = 0) => {
-    const hasQuery   = q.trim().length > 0;
+    const hasQuery = q.trim().length > 0;
     const hasFilters = years.length > 0 || langs.length > 0 || genres.length > 0;
     if (!hasQuery && !hasFilters) { setResults([]); return; }
 
@@ -464,42 +464,42 @@ export default function SearchScreen({ navigation }) {
     });
 
     if (err) {
-  setError('Search failed. Please try again.');
-} else {
-  if (pg === 0) setResults(data);
-  else setResults(prev => [...prev, ...data]);
-  setHasMore(more);
-  setPage(pg + 1);
-  // History is now handled only by the Keyboard 'Search' button
-}
+      setError('Search failed. Please try again.');
+    } else {
+      if (pg === 0) setResults(data);
+      else setResults(prev => [...prev, ...data]);
+      setHasMore(more);
+      setPage(pg + 1);
+      // History is now handled only by the Keyboard 'Search' button
+    }
 
     setSearching(false);
     setLoadingMore(false);
   }, [addToHistory]);
 
   // ── Debounce: auto-search on query/filter change ───────────────────────────
-// ── Debounce: Only update the search term string after typing pauses
-useEffect(() => {
-  const timer = setTimeout(() => {
-    setDebouncedQuery(query);
-  }, 600); 
-  return () => clearTimeout(timer);
-}, [query]);
+  // ── Debounce: Only update the search term string after typing pauses
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [query]);
 
-// ── Search Trigger: Only runs when the debounced term or filters change
-useEffect(() => {
-  if (!isSearchMode) {
-    setResults([]);
-    return;
-  }
-  setPage(0);
-  setHasMore(true);
-  performSearch(query, selYears, selLangs, selGenres, 0);
-}, [debouncedQuery, selYears, selLangs, selGenres]); // Change 'query' to 'debouncedQuery'
+  // ── Search Trigger: Only runs when the debounced term or filters change
+  useEffect(() => {
+    if (!isSearchMode) {
+      setResults([]);
+      return;
+    }
+    setPage(0);
+    setHasMore(true);
+    performSearch(query, selYears, selLangs, selGenres, 0);
+  }, [debouncedQuery, selYears, selLangs, selGenres]); // Change 'query' to 'debouncedQuery'
 
   // ── Toggle filters ─────────────────────────────────────────────────────────
-  const toggleYear  = useCallback(y => setSelYears(p  => p.includes(y) ? p.filter(x => x !== y) : [...p, y]),  []);
-  const toggleLang  = useCallback(l => setSelLangs(p  => p.includes(l) ? p.filter(x => x !== l) : [...p, l]),  []);
+  const toggleYear = useCallback(y => setSelYears(p => p.includes(y) ? p.filter(x => x !== y) : [...p, y]), []);
+  const toggleLang = useCallback(l => setSelLangs(p => p.includes(l) ? p.filter(x => x !== l) : [...p, l]), []);
   const toggleGenre = useCallback(g => setSelGenres(p => p.includes(g) ? p.filter(x => x !== g) : [...p, g]), []);
 
   const clearAllFilters = useCallback(() => {
@@ -511,7 +511,7 @@ useEffect(() => {
   // ── Card press ─────────────────────────────────────────────────────────────
   const handleCardPress = useCallback((item) => {
     Keyboard.dismiss();
-    navigation?.navigate?.('MovieDetail', { movieId: item.id });
+    navigation?.navigate?.('MovieDetail', { movie: item });
   }, [navigation]);
 
   // ── Pagination on scroll ───────────────────────────────────────────────────
@@ -621,8 +621,8 @@ useEffect(() => {
                     ? ['rgba(255,255,255,0.90)', 'rgba(255,255,255,0.55)', 'rgba(0,255,178,0.50)']
                     : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.08)']
                 }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                start={{ x: 1, y: 1 }}
+                end={{ x: 0, y: 0 }}
                 style={[StyleSheet.absoluteFill, { borderRadius: rs(28) }]}
               />
               <View style={S.searchBarInner}>
@@ -644,28 +644,28 @@ useEffect(() => {
                   style={[StyleSheet.absoluteFill, { borderRadius: rs(26) }]}
                 />
                 <Text style={S.searchIcon}>🔍</Text>
- <TextInput
-  ref={inputRef}
-  style={S.searchInput}
-  placeholder="Search movies, series…"
-  placeholderTextColor="rgba(255,255,255,0.42)"
-  value={query}
-  onChangeText={setQuery}
-  returnKeyType="search"
-  onSubmitEditing={() => {
-    Keyboard.dismiss();
-    const cleanQuery = query.trim();
-    if (cleanQuery.length > 0) {
-      // 1. Force the search to start immediately without waiting for the timer
-      setDebouncedQuery(cleanQuery); 
-      // 2. Save only the full sentence/word to history
-      addToHistory(cleanQuery);
-    }
-  }}
-  autoCorrect={false}
-  autoCapitalize="none"
-  selectionColor={COLORS.accent || '#00FFB2'}
-/>
+                <TextInput
+                  ref={inputRef}
+                  style={S.searchInput}
+                  placeholder="Search movies, series…"
+                  placeholderTextColor="rgba(255,255,255,0.42)"
+                  value={query}
+                  onChangeText={setQuery}
+                  returnKeyType="search"
+                  onSubmitEditing={() => {
+                    Keyboard.dismiss();
+                    const cleanQuery = query.trim();
+                    if (cleanQuery.length > 0) {
+                      // 1. Force the search to start immediately without waiting for the timer
+                      setDebouncedQuery(cleanQuery);
+                      // 2. Save only the full sentence/word to history
+                      addToHistory(cleanQuery);
+                    }
+                  }}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  selectionColor={COLORS.accent || '#00FFB2'}
+                />
                 {query.length > 0 && (
                   <TouchableOpacity
                     onPress={() => setQuery('')}
@@ -823,8 +823,8 @@ const S = StyleSheet.create({
     overflow: 'hidden', marginLeft: rs(6),
   },
   clearInputTxt: { color: 'rgba(255,255,255,0.80)', fontSize: rs(10), fontWeight: '800' },
-  cancelBtn:    { marginLeft: rs(12), paddingVertical: rs(6) },
-  cancelTxt:    { color: COLORS.accent || '#00FFB2', fontSize: rs(13), fontWeight: '700' },
+  cancelBtn: { marginLeft: rs(12), paddingVertical: rs(6) },
+  cancelTxt: { color: COLORS.accent || '#00FFB2', fontSize: rs(13), fontWeight: '700' },
 
   // History
   historySection: { marginTop: rs(10), marginBottom: rs(4) },
@@ -832,7 +832,7 @@ const S = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: rs(8),
   },
-  historyLabel:  { color: 'rgba(255,255,255,0.55)', fontSize: rs(11), fontWeight: '700', letterSpacing: 0.6 },
+  historyLabel: { color: 'rgba(255,255,255,0.55)', fontSize: rs(11), fontWeight: '700', letterSpacing: 0.6 },
   historyClearAll: { color: COLORS.accent || '#00FFB2', fontSize: rs(11), fontWeight: '700' },
   historyScroll: { gap: rs(8), paddingRight: rs(16) },
   historyTag: {
@@ -842,9 +842,9 @@ const S = StyleSheet.create({
     paddingLeft: rs(12), paddingRight: rs(6), paddingVertical: rs(6),
   },
   historyTagText: { maxWidth: rs(120) },
-  historyTxt:     { color: 'rgba(255,255,255,0.75)', fontSize: rs(12), fontWeight: '500' },
-  historyTagX:    { marginLeft: rs(8), padding: rs(2) },
-  historyXTxt:    { color: 'rgba(255,255,255,0.40)', fontSize: rs(10), fontWeight: '800' },
+  historyTxt: { color: 'rgba(255,255,255,0.75)', fontSize: rs(12), fontWeight: '500' },
+  historyTagX: { marginLeft: rs(8), padding: rs(2) },
+  historyXTxt: { color: 'rgba(255,255,255,0.40)', fontSize: rs(10), fontWeight: '800' },
 
   // Filters
   filterSection: { marginTop: rs(12) },
@@ -974,8 +974,8 @@ const S = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,45,85,0.26)',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  errorTxt:      { color: '#FFFFFF', fontSize: rs(12), fontWeight: '600', flex: 1 },
-  errorRetry:    {
+  errorTxt: { color: '#FFFFFF', fontSize: rs(12), fontWeight: '600', flex: 1 },
+  errorRetry: {
     paddingHorizontal: rs(12), paddingVertical: rs(4),
     borderRadius: rs(8), borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
@@ -997,7 +997,7 @@ const S = StyleSheet.create({
     shadowOpacity: 1, shadowRadius: rs(16),
   },
   emptyTitle: { color: '#FFFFFF', fontSize: rs(17), fontWeight: '800', textAlign: 'center', marginBottom: rs(8) },
-  emptySub:   { color: 'rgba(255,255,255,0.50)', fontSize: rs(13), textAlign: 'center', lineHeight: rs(19) },
+  emptySub: { color: 'rgba(255,255,255,0.50)', fontSize: rs(13), textAlign: 'center', lineHeight: rs(19) },
 
   // Load more
   loadMoreRow: {
