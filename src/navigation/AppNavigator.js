@@ -528,23 +528,33 @@ function HomeStack() {
         freezeOnBlur: true
       }}
     >
+
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen
-  name="MovieDetail"
-  component={MovieDetails}
-  options={{
-    headerShown: false,
-    cardStyleInterpolator: netflixInterpolator,
-    transitionSpec: {
-      open: { animation: 'timing', config: { duration: 380, easing: Easing.out(Easing.poly(4)) } },
-      close: { animation: 'timing', config: { duration: 280, easing: Easing.in(Easing.poly(4)) } },
-    },
-    gestureEnabled: true,
-    gestureDirection: 'vertical',
-  }}
-/>
+        name="MovieDetail"
+        component={MovieDetails}
+        options={{
+          headerShown: false,
+          cardStyleInterpolator: netflixInterpolator,
+          transitionSpec: {
+            open: { animation: 'timing', config: { duration: 380, easing: Easing.out(Easing.poly(4)) } },
+            close: { animation: 'timing', config: { duration: 280, easing: Easing.in(Easing.poly(4)) } },
+          },
+          gestureEnabled: true,
+          gestureDirection: 'vertical',
+        }}
+      />
       <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="Player" component={Player} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
+      <Stack.Screen name="Player" component={Player} options={{
+        headerShown: false,
+        cardStyleInterpolator: netflixInterpolator,
+        transitionSpec: {
+          open: { animation: 'timing', config: { duration: 380, easing: Easing.out(Easing.poly(4)) } },
+          close: { animation: 'timing', config: { duration: 280, easing: Easing.in(Easing.poly(4)) } },
+        },
+        gestureEnabled: true,
+        gestureDirection: 'vertical',
+      }} />
     </Stack.Navigator>
   );
 }
@@ -554,7 +564,6 @@ function SearchStack() {
     <Stack.Navigator screenOptions={{ ...sharedScreenOpts, freezeOnBlur: true }}>
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="MovieDetail" component={MovieDetails} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
-      <Stack.Screen name="GenreScreen" component={GenreScreen} options={{ animation: 'ios_from_right', animationDuration: 300 }} />
     </Stack.Navigator>
   );
 }
@@ -588,26 +597,26 @@ function MainTabs() {
   }, []);
 
   function getActiveRouteName(state) {
-  if (!state) return null;
-  const route = state.routes[state.index];
-  if (route.state) return getActiveRouteName(route.state);
-  return route.name;
-}
+    if (!state) return null;
+    const route = state.routes[state.index];
+    if (route.state) return getActiveRouteName(route.state);
+    return route.name;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Tab.Navigator
         //tabBar={(props) => <CustomTabBar {...props} />}
         //tabBar={(props) => keyboardVisible ? null : <CustomTabBar {...props} />}
-tabBar={(props) => {
-  if (keyboardVisible) return null;
-  
-  const activeRoute = getActiveRouteName(props.state);
-  const hiddenOnRoutes = ['MovieDetail', 'Player', 'GenreScreen'];
-  if (hiddenOnRoutes.includes(activeRoute)) return null;
-  
-  return <CustomTabBar {...props} />;
-}}
+        tabBar={(props) => {
+          if (keyboardVisible) return null;
+
+          const activeRoute = getActiveRouteName(props.state);
+          const hiddenOnRoutes = ['MovieDetail', 'Player', 'GenreScreen'];
+          if (hiddenOnRoutes.includes(activeRoute)) return null;
+
+          return <CustomTabBar {...props} />;
+        }}
         screenOptions={{
           headerShown: false,
           lazy: false,         // pre-mount all screens — instant tab switching
