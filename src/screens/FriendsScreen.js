@@ -649,35 +649,54 @@ export default function FriendsScreen({ navigation }) {
         await Promise.all([loadPending(), loadFriends()]);
     }, [currentUserId]);
 
-    const loadPending = async () => {
-        setPendingLoading(true);
-        try {
-            let data;
-            try { data = await fetchPendingRequests(currentUserId); }
-            catch { data = MOCK_REQUESTS; }
-            setPendingReqs(data || []);
-        } catch { setPendingReqs(MOCK_REQUESTS); }
-        finally { setPendingLoading(false); }
-    };
+const loadPending = async () => {
+    setPendingLoading(true);
+    try {
+        let data;
+        try { 
+            data = await fetchPendingRequests(currentUserId); 
+        } catch (err) { 
+            console.warn("API Fail, using Mock:", err);
+            data = MOCK_REQUESTS; 
+        }
+        setPendingReqs(data || []);
+    } catch (e) {
+        setPendingReqs(MOCK_REQUESTS);
+    } finally {
+        // This MUST run to stop the shimmer
+        setPendingLoading(false);
+    }
+};
 
-    const loadFriends = async () => {
-        setFriendsLoading(true);
-        try {
-            let data;
-            try { data = await fetchConnectedFriends(currentUserId); }
-            catch { data = MOCK_FRIENDS; }
-            setFriends(data || []);
+const loadFriends = async () => {
+    setFriendsLoading(true);
+    try {
+        // 1. Load Friends
+        let friendData;
+        try { 
+            friendData = await fetchConnectedFriends(currentUserId); 
+        } catch { 
+            friendData = MOCK_FRIENDS; 
+        }
+        setFriends(friendData || []);
 
-            // Load sent request IDs
-            try {
-                const ids = await getSentRequestIds(currentUserId);
-                const map = {};
-                (ids || []).forEach(id => { map[id] = true; });
-                setSentMap(map);
-            } catch { }
-        } catch { setFriends(MOCK_FRIENDS); }
-        finally { setFriendsLoading(false); }
-    };
+        // 2. Load Sent IDs (Independent try/catch so it doesn't break the UI)
+        try {
+            const ids = await getSentRequestIds(currentUserId);
+            const map = {};
+            (ids || []).forEach(id => { map[id] = true; });
+            setSentMap(map);
+        } catch (e) {
+            console.log("Sent IDs failed to load", e);
+        }
+    } catch (outerError) {
+        setFriends(MOCK_FRIENDS);
+    } finally {
+        // This ensures the shimmer stops even if everything fails
+        setFriendsLoading(false);
+    }
+};
+
 
     const loadSearchHistory = async () => {
         try {
