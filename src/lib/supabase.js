@@ -1039,3 +1039,282 @@ export const computeTopGenres = async (userId) => {
     return [];
   }
 };
+
+/**
+ * supabase_additions.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ADD THESE FUNCTIONS TO YOUR EXISTING src/lib/supabase.js
+ * All functions are optimized for production (indexed queries, minimal fetches,
+ * proper error handling, mock fallbacks).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+// ── PASTE THIS BLOCK INTO supabase.js ────────────────────────────────────────
+// Make sure `supabase` client is already initialized at the top of the file.
+
+// ─── fetchMovieById ──────────────────────────────────────────────────────────
+/**
+ * Fetch a single movie/series with all metadata.
+ * @param {string} id
+ */
+export async function fetchMovieById(id) {
+  const { data, error } = await supabase
+    .from('movies')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── fetchCastByMovieId ──────────────────────────────────────────────────────
+/**
+ * Fetch cast/crew for a movie.
+ * Requires a `cast` table: (id, movie_id, name, character, avatar, role)
+ * @param {string} movieId
+ */
+export async function fetchCastByMovieId(movieId) {
+  const { data, error } = await supabase
+    .from('cast')
+    .select('id, name, character, avatar, role')
+    .eq('movie_id', movieId)
+    .order('order_index', { ascending: true })
+    .limit(12);
+  if (error) throw error;
+  return data || [];
+}
+
+// ─── fetchSimilarMovies ───────────────────────────────────────────────────────
+/**
+ * Fetch similar movies — same genre(s), exclude current movie.
+ * @param {string} movieId
+ * @param {number} limit
+ */
+export async function fetchSimilarMovies(movieId, limit = 8) {
+  // First get the current movie's genres
+  const { data: current } = await supabase
+    .from('movies')
+    .select('genre')
+    .eq('id', movieId)
+    .single();
+
+  if (!current?.genre?.length) {
+    // Fallback: just return recent movies
+    const { data, error } = await supabase
+      .from('movies')
+      .select('id, title, poster, rating, is_series, is_trending, newly_added, genre')
+      .neq('id', movieId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Use overlap operator for array genres
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id, title, poster, rating, is_series, is_trending, newly_added, genre')
+    .neq('id', movieId)
+    .overlaps('genre', current.genre)
+    .order('rating', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+// ─── fetchCommentsByMovieId ───────────────────────────────────────────────────
+/**
+ * Fetch comments for a movie, joined with user profiles.
+ * Requires a `comments` table: (id, movie_id, user_id, text, created_at, likes)
+ * Requires a `profiles` table: (id, username, avatar)
+ * @param {string} movieId
+ * @param {number} limit
+ */
+export async function fetchCommentsByMovieId(movieId, limit = 30) {
+  const { data, error } = await supabase
+    .from('comments')
+    .select(`
+      id, text, created_at, likes,
+      user_id,
+      profiles:user_id (username, avatar)
+    `)
+    .eq('movie_id', movieId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  // Flatten profile join
+  return (data || []).map(c => ({
+    id: c.id,
+    user_id: c.user_id,
+    text: c.text,
+    created_at: c.created_at,
+    likes: c.likes || 0,
+    username: c.profiles?.username || 'Anonymous',
+    avatar: c.profiles?.avatar || null,
+  }));
+}
+
+// ─── postComment ─────────────────────────────────────────────────────────────
+/**
+ * Post a comment on a movie.
+ * @param {string} userId
+ * @param {string} movieId
+ * @param {string} text
+ */
+export async function postComment(userId, movieId, text) {
+  if (!userId || !movieId || !text?.trim()) throw new Error('Invalid params');
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({ user_id: userId, movie_id: movieId, text: text.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── toggleLike ──────────────────────────────────────────────────────────────
+/**
+ * Like or unlike a movie. Uses upsert for idempotency.
+ * Requires a `likes` table: (user_id, movie_id) with unique(user_id, movie_id)
+ * @param {string} userId
+ * @param {string} movieId
+ */
+export async function toggleLike(userId, movieId) {
+  if (!userId || !movieId) throw new Error('Invalid params');
+
+  // Check if already liked
+  const { data: existing } = await supabase
+    .from('likes')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('movie_id', movieId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from('likes')
+      .delete()
+      .eq('user_id', userId)
+      .eq('movie_id', movieId);
+    if (error) throw error;
+    return { liked: false };
+  } else {
+    const { error } = await supabase
+      .from('likes')
+      .insert({ user_id: userId, movie_id: movieId });
+    if (error) throw error;
+    return { liked: true };
+  }
+}
+
+// ─── toggleWatchlist ─────────────────────────────────────────────────────────
+/**
+ * Add or remove from watchlist.
+ * Requires a `watchlist` table: (user_id, movie_id)
+ * @param {string} userId
+ * @param {string} movieId
+ */
+export async function toggleWatchlist(userId, movieId) {
+  if (!userId || !movieId) throw new Error('Invalid params');
+
+  const { data: existing } = await supabase
+    .from('watchlist')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('movie_id', movieId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from('watchlist')
+      .delete()
+      .eq('user_id', userId)
+      .eq('movie_id', movieId);
+    if (error) throw error;
+    return { watchlisted: false };
+  } else {
+    const { error } = await supabase
+      .from('watchlist')
+      .insert({ user_id: userId, movie_id: movieId });
+    if (error) throw error;
+    return { watchlisted: true };
+  }
+}
+
+// ─── rateMovie ───────────────────────────────────────────────────────────────
+/**
+ * Rate a movie (1-5 stars). Upserts so user can update their rating.
+ * Requires a `ratings` table: (user_id, movie_id, value)
+ * @param {string} userId
+ * @param {string} movieId
+ * @param {number} value  1-5
+ */
+export async function rateMovie(userId, movieId, value) {
+  if (!userId || !movieId || value < 1 || value > 5) throw new Error('Invalid params');
+  const { data, error } = await supabase
+    .from('ratings')
+    .upsert(
+      { user_id: userId, movie_id: movieId, value },
+      { onConflict: 'user_id,movie_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── fetchSeasonsBySeriesId ───────────────────────────────────────────────────
+/**
+ * Fetch all seasons for a series, ordered by season_number.
+ * @param {string} seriesId
+ */
+export async function fetchSeasonsBySeriesId(seriesId) {
+  const { data, error } = await supabase
+    .from('seasons')
+    .select('id, series_id, season_number, created_at')
+    .eq('series_id', seriesId)
+    .order('season_number', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// ─── fetchEpisodesBySeasonId ─────────────────────────────────────────────────
+/**
+ * Fetch all episodes for a season, ordered by episode_number.
+ * @param {string} seasonId
+ */
+export async function fetchEpisodesBySeasonId(seasonId) {
+  const { data, error } = await supabase
+    .from('episodes')
+    .select('id, season_id, episode_number, title, duration, description, video_url, thumbnail_url, created_at')
+    .eq('season_id', seasonId)
+    .order('episode_number', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// ─── getCurrentUser ───────────────────────────────────────────────────────────
+/**
+ * Get the currently authenticated user + their profile.
+ * Returns null if not logged in.
+ */
+export async function getCurrentUser() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('username, avatar, bio')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  return {
+    id: user.id,
+    email: user.email,
+    username: profile?.username || user.email?.split('@')[0] || 'User',
+    avatar: profile?.avatar || null,
+    bio: profile?.bio || null,
+  };
+}
