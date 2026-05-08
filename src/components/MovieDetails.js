@@ -1,34 +1,33 @@
 /**
- * MovieDetails.js
+ * MovieDetails.js — Netflix-Style Production Screen
  * ─────────────────────────────────────────────────────────────────────────────
- * Production-grade Movie Detail Screen
- * • 3D Hyped Glass UI throughout
- * • Auto-playing trailer with controls (progress, mute, replay)
- * • Like / Watchlist / Rating with auth guard
- * • Synopsis (100 char limit), Cast & Crew horizontal scroll
- * • "More Like This" 2-col grid + Comments tab
- * • Series support: Seasons → Episodes (Netflix-style)
- * • User profile modal on comment avatar tap
- * • Floating Button hidden on this screen (handled in AppNavigator)
- * • All API via supabase.js (mock fallback included)
- * ─────────────────────────────────────────────────────────────────────────────
+ * CHANGES:
+ * 1. Transparent header (80%) with trailer playing behind it
+ * 2. Play/pause/replay controls ONLY on video, show on tap, hide on tap elsewhere
+ * 3. Below video: only progress bar + remaining time + sound icon
+ * 4. No border on video — edge-to-edge like Netflix
+ * 5. Full Netflix-mimicry: hero trailer autoplay, fades to info card
+ * 6. Receives full movie object from HomeScreen navigation params
+ * 7. Uses movieId to fetch cast/crew/comments; movie object for hero display
+ * 8. Full-screen attractive shimmer loader
+ * 9. Fully optimized, responsive, production-grade
  */
 
 import React, {
-  useRef, useEffect, useState, useCallback, useMemo, memo,
+  useRef, useEffect, useState, useCallback, memo,
 } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, FlatList,
   TouchableOpacity, TouchableWithoutFeedback,
   Animated, Dimensions, StatusBar, ImageBackground,
   ActivityIndicator, TextInput, Modal, Platform,
-  KeyboardAvoidingView, Keyboard, PanResponder,
+  KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Video from 'react-native-video';
-import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
+import Icona from 'react-native-vector-icons/Octicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, RADIUS, SHADOW } from '../data/theme';
 import {
@@ -44,7 +43,7 @@ import {
   fetchEpisodesBySeasonId,
   getCurrentUser,
 } from '../lib/supabase';
-
+import { limitWords } from '../utils/helper';
 // ─── Responsive ───────────────────────────────────────────────────────────────
 const { width: SW, height: SH } = Dimensions.get('window');
 const rs = (s) => {
@@ -55,7 +54,16 @@ const rs = (s) => {
   return s;
 };
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+const ACCENT = '#00FFB2';
+const ACCENT_DIM = '#00CC90';
+const BG = COLORS?.bg || '#030F0C';
+const GLASS_BORDER = 'rgba(255,255,255,0.13)';
+const GLASS_BG = 'rgba(255,255,255,0.07)';
+const GLASS_HIGH = 'rgba(255,255,255,0.18)';
+const HERO_H = SH * 0.45; // Netflix hero height
+
+// ─── Mock Data (Fallbacks) ────────────────────────────────────────────────────
 const MOCK_MOVIE = {
   id: 'm1',
   title: 'NEBULA ASCENT',
@@ -122,39 +130,17 @@ const MOCK_EPISODES = {
   ],
 };
 
-const MOCK_USER_PROFILE = {
-  id: 'u1',
-  username: 'nebula_fan',
-  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-  bio: 'Sci-fi enthusiast & space explorer 🚀',
-  followers: 1240,
-  following: 385,
-  reviews: 92,
-};
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const ACCENT = '#00FFB2';
-const ACCENT_DIM = '#00CC90';
-const BG = COLORS.bg || '#030F0C';
-const GLASS_BORDER = 'rgba(255,255,255,0.16)';
-const GLASS_BG = 'rgba(255,255,255,0.08)';
-const GLASS_HIGH = 'rgba(255,255,255,0.18)';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const limitWords = (str = '', max = 18) => {
-  if (!str) return '';
-  const words = str.split(' ');
-  return words.length <= max ? str : words.slice(0, max).join(' ') + '…';
-};
-const limitChars = (str = '', max = 100) => {
+
+const limitChars = (str = '', max = 120) => {
   if (!str || str.length <= max) return str;
   return str.slice(0, max) + '…';
 };
 const formatTime = (secs) => {
   const s = Math.floor(secs || 0);
   const m = Math.floor(s / 60);
-  const remaining = s % 60;
-  return `${m}:${remaining < 10 ? '0' : ''}${remaining}`;
+  const r = s % 60;
+  return `${m}:${r < 10 ? '0' : ''}${r}`;
 };
 const timeAgo = (dateStr) => {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -164,31 +150,6 @@ const timeAgo = (dateStr) => {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 };
-
-// ─── Shared shimmer ───────────────────────────────────────────────────────────
-const shimA = new Animated.Value(0);
-Animated.loop(
-  Animated.sequence([
-    Animated.timing(shimA, { toValue: 1, duration: 900, useNativeDriver: true }),
-    Animated.timing(shimA, { toValue: 0, duration: 900, useNativeDriver: true }),
-  ])
-).start();
-const shimOpac = shimA.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.40] });
-
-const SkeletonBox = memo(({ width, height, borderRadius = rs(10), style }) => (
-  <Animated.View style={[{ width, height, borderRadius, overflow: 'hidden', opacity: shimOpac }, style]}>
-    <LinearGradient colors={[GLASS_BG, GLASS_HIGH, GLASS_BG]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
-  </Animated.View>
-));
-
-// ─── Glass Layer Helper ───────────────────────────────────────────────────────
-const GlassLayer = ({ borderRadius = rs(12), alpha = 0.12 }) => (
-  <>
-    <LinearGradient colors={[`rgba(255,255,255,${alpha + 0.06})`, `rgba(255,255,255,${alpha})`]} style={[StyleSheet.absoluteFill, { borderRadius }]} />
-    <LinearGradient colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.45 }} style={[StyleSheet.absoluteFill, { borderRadius }]} />
-    <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.14)']} start={{ x: 0, y: 0.6 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius }]} />
-  </>
-);
 
 // ─── Press Scale Hook ─────────────────────────────────────────────────────────
 function usePressScale(to = 0.93) {
@@ -201,7 +162,7 @@ function usePressScale(to = 0.93) {
   };
 }
 
-// ─── Toast ─────────────────────────────────────────────────────────────────────
+// ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [state, setState] = useState({ msg: '', visible: false });
   const t = useRef(null);
@@ -213,6 +174,126 @@ function useToast() {
   return { toast: state, showToast: show };
 }
 
+// ─── FULL-SCREEN SHIMMER ─────────────────────────────────────────────────────
+const FullScreenShimmer = memo(() => {
+  const shimA = useRef(new Animated.Value(0)).current;
+  const scanA = useRef(new Animated.Value(-SW)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimA, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(shimA, { toValue: 0.3, duration: 1100, useNativeDriver: true }),
+      ])
+    ).start();
+    Animated.loop(
+      Animated.timing(scanA, { toValue: SW, duration: 1600, useNativeDriver: true })
+    ).start();
+  }, []);
+
+  const shimOpac = shimA.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.28] });
+
+  const ShimBlock = ({ w, h, br = rs(10), mt = 0, ml = 0 }) => (
+    <Animated.View style={{
+      width: w, height: h, borderRadius: br,
+      marginTop: mt, marginLeft: ml,
+      overflow: 'hidden',
+      backgroundColor: 'rgba(255,255,255,0.08)',
+    }}>
+      <Animated.View style={[StyleSheet.absoluteFill, {
+        transform: [{ translateX: scanA }],
+      }]}>
+        <LinearGradient
+          colors={['transparent', 'rgba(0,255,178,0.12)', 'rgba(255,255,255,0.18)', 'rgba(0,255,178,0.12)', 'transparent']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={{ width: SW * 0.5, height: '100%' }}
+        />
+      </Animated.View>
+    </Animated.View>
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar hidden />
+      {/* Hero shimmer */}
+      <ShimBlock w={SW} h={HERO_H} br={0} />
+      {/* Gradient overlay on hero */}
+      <LinearGradient
+        colors={['transparent', 'rgba(3,15,12,0.6)', BG]}
+        style={{ position: 'absolute', top: HERO_H * 0.4, left: 0, right: 0, height: HERO_H * 0.6 }}
+      />
+      {/* Content shimmers */}
+      <View style={{ paddingHorizontal: rs(18), marginTop: rs(20) }}>
+        {/* Genre badges */}
+        <View style={{ flexDirection: 'row', gap: rs(8), marginBottom: rs(16) }}>
+          <ShimBlock w={rs(65)} h={rs(26)} br={rs(13)} />
+          <ShimBlock w={rs(55)} h={rs(26)} br={rs(13)} />
+          <ShimBlock w={rs(45)} h={rs(26)} br={rs(13)} />
+        </View>
+        {/* Title */}
+        <ShimBlock w={SW * 0.72} h={rs(34)} br={rs(8)} />
+        <ShimBlock w={SW * 0.45} h={rs(22)} br={rs(8)} mt={rs(10)} />
+        {/* Meta chips */}
+        <View style={{ flexDirection: 'row', gap: rs(8), marginTop: rs(14) }}>
+          {[rs(80), rs(70), rs(90), rs(60)].map((w, i) => (
+            <ShimBlock key={i} w={w} h={rs(32)} br={rs(10)} />
+          ))}
+        </View>
+        {/* Action buttons */}
+        <View style={{ flexDirection: 'row', gap: rs(10), marginTop: rs(22) }}>
+          <ShimBlock w={(SW - rs(56)) / 3} h={rs(70)} br={rs(14)} />
+          <ShimBlock w={(SW - rs(56)) / 3} h={rs(70)} br={rs(14)} />
+          <ShimBlock w={(SW - rs(56)) / 3} h={rs(70)} br={rs(14)} />
+        </View>
+        {/* Synopsis block */}
+        <ShimBlock w={SW - rs(36)} h={rs(90)} br={rs(14)} mt={rs(22)} />
+        {/* Cast section title */}
+        <ShimBlock w={rs(120)} h={rs(22)} br={rs(6)} mt={rs(28)} />
+        {/* Cast avatars */}
+        <View style={{ flexDirection: 'row', gap: rs(12), marginTop: rs(14) }}>
+          {[...Array(4)].map((_, i) => (
+            <View key={i} style={{ alignItems: 'center', gap: rs(8) }}>
+              <ShimBlock w={rs(64)} h={rs(64)} br={rs(32)} />
+              <ShimBlock w={rs(52)} h={rs(10)} br={rs(5)} />
+            </View>
+          ))}
+        </View>
+        {/* Tab row */}
+        <View style={{ flexDirection: 'row', gap: rs(16), marginTop: rs(28) }}>
+          <ShimBlock w={rs(120)} h={rs(32)} br={rs(8)} />
+          <ShimBlock w={rs(130)} h={rs(32)} br={rs(8)} />
+        </View>
+        {/* Grid cards */}
+        <View style={{ flexDirection: 'row', gap: rs(12), marginTop: rs(16) }}>
+          <ShimBlock w={(SW - rs(48)) / 2} h={rs(170)} br={rs(14)} />
+          <ShimBlock w={(SW - rs(48)) / 2} h={rs(170)} br={rs(14)} />
+        </View>
+        <View style={{ flexDirection: 'row', gap: rs(12), marginTop: rs(12) }}>
+          <ShimBlock w={(SW - rs(48)) / 2} h={rs(170)} br={rs(14)} />
+          <ShimBlock w={(SW - rs(48)) / 2} h={rs(170)} br={rs(14)} />
+        </View>
+      </View>
+      {/* Accent glow */}
+      <Animated.View style={{
+        position: 'absolute', top: HERO_H * 0.3, left: SW * 0.2, right: SW * 0.2,
+        height: rs(2), borderRadius: rs(1),
+        backgroundColor: ACCENT, opacity: shimOpac,
+        shadowColor: ACCENT, shadowOpacity: 1, shadowRadius: rs(20),
+      }} />
+    </View>
+  );
+});
+
+// ─── Glass Layer ──────────────────────────────────────────────────────────────
+const GlassLayer = ({ borderRadius = rs(12), alpha = 0.12 }) => (
+  <>
+    <LinearGradient colors={[`rgba(255,255,255,${alpha + 0.06})`, `rgba(255,255,255,${alpha})`]} style={[StyleSheet.absoluteFill, { borderRadius }]} />
+    <LinearGradient colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.45 }} style={[StyleSheet.absoluteFill, { borderRadius }]} />
+    <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.14)']} start={{ x: 0, y: 0.6 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius }]} />
+  </>
+);
+
+// ─── Toast Banner ─────────────────────────────────────────────────────────────
 const ToastBanner = memo(({ msg, visible }) => {
   const opac = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -226,24 +307,21 @@ const ToastBanner = memo(({ msg, visible }) => {
   );
 });
 
-// ─── Rating Stars ─────────────────────────────────────────────────────────────
-const StarRating = memo(({ value, onChange }) => {
-  return (
-    <View style={{ flexDirection: 'row', gap: rs(6) }}>
-      {[1, 2, 3, 4, 5].map(star => (
-        <TouchableOpacity key={star} onPress={() => onChange(star)} activeOpacity={0.75}>
-          <Text style={{ fontSize: rs(22), color: star <= value ? '#FFD700' : 'rgba(255,255,255,0.25)' }}>★</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-});
+// ─── Star Rating ──────────────────────────────────────────────────────────────
+const StarRating = memo(({ value, onChange }) => (
+  <View style={{ flexDirection: 'row', gap: rs(8) }}>
+    {[1, 2, 3, 4, 5].map(star => (
+      <TouchableOpacity key={star} onPress={() => onChange(star)} activeOpacity={0.75}>
+        <Text style={{ fontSize: rs(26), color: star <= value ? '#FFD700' : 'rgba(255,255,255,0.2)' }}>★</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+));
 
 // ─── User Profile Modal ───────────────────────────────────────────────────────
 const UserProfileModal = memo(({ user, visible, onClose }) => {
   const scaleA = useRef(new Animated.Value(0.85)).current;
   const opacA = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     if (visible) {
       Animated.parallel([
@@ -257,24 +335,18 @@ const UserProfileModal = memo(({ user, visible, onClose }) => {
       ]).start();
     }
   }, [visible]);
-
   if (!user) return null;
-
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <TouchableWithoutFeedback onPress={onClose}>
         <Animated.View style={[S.modalOverlay, { opacity: opacA }]}>
           <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
             <Animated.View style={[S.profileModal, { transform: [{ scale: scaleA }], opacity: opacA }]}>
-              {/* Glass layers */}
               <LinearGradient colors={['rgba(10,30,22,0.97)', 'rgba(3,15,12,0.99)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(24) }]} />
               <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(24) }]} />
-              {/* Accent top line */}
               <LinearGradient colors={[ACCENT, ACCENT_DIM, 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={S.modalAccentLine} />
-
-              {/* Avatar */}
               <View style={S.modalAvatarWrap}>
-                <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(45) }]} />
+                <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(46) }]} />
                 {user.avatar ? (
                   <ImageBackground source={{ uri: user.avatar }} style={S.modalAvatar} imageStyle={{ borderRadius: rs(42) }} />
                 ) : (
@@ -282,11 +354,8 @@ const UserProfileModal = memo(({ user, visible, onClose }) => {
                 )}
                 <View style={S.modalOnlineDot} />
               </View>
-
               <Text style={S.modalUsername}>@{user.username}</Text>
               {user.bio ? <Text style={S.modalBio}>{user.bio}</Text> : null}
-
-              {/* Stats */}
               <View style={S.modalStats}>
                 {[
                   { label: 'Reviews', val: user.reviews || 0 },
@@ -299,8 +368,6 @@ const UserProfileModal = memo(({ user, visible, onClose }) => {
                   </View>
                 ))}
               </View>
-
-              {/* Close */}
               <TouchableOpacity onPress={onClose} style={S.modalCloseBtn} activeOpacity={0.8}>
                 <GlassLayer borderRadius={rs(20)} />
                 <Text style={S.modalCloseTxt}>✕  Close</Text>
@@ -313,215 +380,203 @@ const UserProfileModal = memo(({ user, visible, onClose }) => {
   );
 });
 
-// ─── Video Player Section ─────────────────────────────────────────────────────
-const VideoPlayer = memo(({ uri, posterUri, onEnded }) => {
+// ─── NETFLIX-STYLE HERO TRAILER ───────────────────────────────────────────────
+// Controls visible only on tap, auto-hide after 3s. Below: thin progress + time + mute.
+const HeroTrailer = memo(({ uri, posterUri, onEnded, muted, onMuteToggle }) => {
   const videoRef = useRef(null);
   const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [ended, setEnded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showControls, setShowControls] = useState(true);
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const controlsOpac = useRef(new Animated.Value(0)).current;
   const controlTimer = useRef(null);
-  const controlOpac = useRef(new Animated.Value(1)).current;
 
-  const VIDEO_H = SW * 0.56;
-
-  // Auto-hide controls
-  const resetControlTimer = useCallback(() => {
+  const showControls = useCallback(() => {
     clearTimeout(controlTimer.current);
-    Animated.timing(controlOpac, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-    setShowControls(true);
+    Animated.timing(controlsOpac, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    setControlsVisible(true);
     controlTimer.current = setTimeout(() => {
       if (!paused && !ended) {
-        Animated.timing(controlOpac, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+        Animated.timing(controlsOpac, { toValue: 0, duration: 400, useNativeDriver: true }).start(
+          () => setControlsVisible(false)
+        );
       }
     }, 3000);
   }, [paused, ended]);
 
+  const hideControls = useCallback(() => {
+    clearTimeout(controlTimer.current);
+    Animated.timing(controlsOpac, { toValue: 0, duration: 300, useNativeDriver: true }).start(
+      () => setControlsVisible(false)
+    );
+  }, []);
+
   useEffect(() => {
-    resetControlTimer();
     return () => clearTimeout(controlTimer.current);
   }, []);
 
+  // Keep controls visible when paused/ended
   useEffect(() => {
     if (paused || ended) {
-      Animated.timing(controlOpac, { toValue: 1, duration: 150, useNativeDriver: true }).start();
       clearTimeout(controlTimer.current);
-    } else {
-      resetControlTimer();
+      Animated.timing(controlsOpac, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+      setControlsVisible(true);
     }
   }, [paused, ended]);
 
-  const handleVideoPress = useCallback(() => {
-    if (ended) return;
-    setPaused(p => !p);
-    resetControlTimer();
-  }, [ended]);
+  const handleVideoTap = useCallback(() => {
+    if (controlsVisible) {
+      if (!paused && !ended) {
+        hideControls();
+      }
+    } else {
+      showControls();
+    }
+  }, [controlsVisible, paused, ended, showControls, hideControls]);
 
-  const handleProgress = useCallback(({ currentTime: ct }) => {
-    setCurrentTime(ct);
-  }, []);
-
-  const handleLoad = useCallback(({ duration: d }) => {
-    setDuration(d);
-    setLoading(false);
-  }, []);
-
-  const handleEnd = useCallback(() => {
-    setEnded(true);
-    setPaused(true);
-    onEnded?.();
-  }, [onEnded]);
-
-  const handleReplay = useCallback(() => {
-    setEnded(false);
-    setPaused(false);
-    setCurrentTime(0);
-    videoRef.current?.seek(0);
-    resetControlTimer();
-  }, []);
-
-  const handleSeek = useCallback((val) => {
-    videoRef.current?.seek(val);
-    setCurrentTime(val);
-    resetControlTimer();
-  }, []);
-
+  const handlePlayPause = useCallback((e) => {
+    e.stopPropagation?.();
+    if (ended) {
+      setEnded(false);
+      setPaused(false);
+      setCurrentTime(0);
+      videoRef.current?.seek(0);
+      showControls();
+    } else {
+      setPaused(p => {
+        if (!p) {
+          // Pausing — keep controls visible
+          clearTimeout(controlTimer.current);
+        } else {
+          // Resuming — start auto-hide
+          showControls();
+        }
+        return !p;
+      });
+    }
+  }, [ended, showControls]);
   const progress = duration > 0 ? currentTime / duration : 0;
-  const remaining = duration - currentTime;
+  const remaining = Math.max(duration - currentTime, 0);
 
   return (
-    <View style={[S.videoWrap, { height: VIDEO_H }]}>
-      {/* Glass border */}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0.08)', `rgba(0,255,178,0.18)`]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]}
-      />
-      <View style={S.videoInner}>
-        {/* Actual Video — falls back to poster if no URI */}
-        {uri ? (
-          <TouchableWithoutFeedback onPress={handleVideoPress}>
-            <View style={{ flex: 1 }}>
-              <Video
-                ref={videoRef}
-                source={{ uri }}
-                style={StyleSheet.absoluteFill}
-                paused={paused}
-                muted={muted}
-                resizeMode="cover"
-                onProgress={handleProgress}
-                onLoad={handleLoad}
-                onEnd={handleEnd}
-                onBuffer={({ isBuffering }) => setLoading(isBuffering)}
-                repeat={false}
-                playInBackground={false}
-                ignoreSilentSwitch="ignore"
-              />
+    <View style={S.heroWrap}>
+      {/* ── Video / Poster ── */}
+      <TouchableWithoutFeedback onPress={handleVideoTap}>
+        <View style={{ width: SW, height: HERO_H }}>
+          {uri ? (
+            <Video
+              ref={videoRef}
+              source={{ uri: "https://www.w3schools.com/html/mov_bbb.mp4" }}
+              style={StyleSheet.absoluteFill}
+              paused={false}
+              muted={muted}
+              resizeMode="cover"
+              onProgress={({ currentTime: ct }) => setCurrentTime(ct)}
+              onLoad={({ duration: d }) => { setDuration(d); setLoading(false); }}
+              onEnd={() => { setEnded(true); setPaused(true); onEnded?.(); }}
+              onBuffer={({ isBuffering }) => setLoading(isBuffering)}
+              repeat={false}
+              playInBackground={false}
+              ignoreSilentSwitch="ignore"
+            />
+          ) : (
+            <ImageBackground
+              source={{ uri: posterUri }}
+              style={{ width: SW, height: HERO_H }}
+              resizeMode="cover"
+            />
+          )}
+
+          {/* Deep gradient — bottom fade into BG */}
+          <LinearGradient
+            colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.25)', 'rgba(3,15,12,0.85)', BG]}
+            locations={[0, 0.45, 0.78, 1]}
+            style={[StyleSheet.absoluteFill]}
+          />
+          {/* Side fade vignette */}
+          <LinearGradient
+            colors={['rgba(3,15,12,0.3)', 'transparent', 'rgba(3,15,12,0.3)']}
+            start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Loading */}
+          {loading && (
+            <View style={S.heroLoadingOverlay}>
+              <ActivityIndicator color={ACCENT} size="large" />
             </View>
-          </TouchableWithoutFeedback>
-        ) : (
-          /* Poster fallback with play overlay */
-          <TouchableWithoutFeedback onPress={handleVideoPress}>
-            <View style={{ flex: 1 }}>
-              <ImageBackground source={{ uri: posterUri }} style={{ flex: 1 }} resizeMode="cover" imageStyle={{ borderRadius: rs(16) }}>
-                <LinearGradient colors={['rgba(3,15,12,0.4)', 'rgba(3,15,12,0.15)', 'rgba(3,15,12,0.55)']} style={StyleSheet.absoluteFill} />
-              </ImageBackground>
-            </View>
-          </TouchableWithoutFeedback>
-        )}
+          )}
 
-        {/* Loading indicator */}
-        {loading && (
-          <View style={S.videoLoadingOverlay}>
-            <ActivityIndicator color={ACCENT} size="large" />
-          </View>
-        )}
+          {/* ── Tap-to-show controls overlay ── */}
+          <Animated.View
+            style={[S.heroControlsOverlay, { opacity: controlsOpac }]}
+            pointerEvents={controlsVisible ? 'box-none' : 'none'}
+          >
+            {/* Dark scrim so controls are readable */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.32)' }]} />
 
-        {/* Replay overlay */}
-        {ended && (
-          <View style={S.replayOverlay}>
-            <TouchableOpacity onPress={handleReplay} activeOpacity={0.8} style={S.replayBtn}>
-              <LinearGradient colors={[ACCENT, ACCENT_DIM, '#009A6E']} style={[StyleSheet.absoluteFill, { borderRadius: rs(40) }]} />
-              <LinearGradient colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(40) }]} />
-              <Text style={S.replayIcon}>↺</Text>
-              <Text style={S.replayTxt}>Replay</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Pause/Play center icon (appears on tap, brief) */}
-        {!ended && (
-          <Animated.View style={[S.centerPlayIcon, { opacity: controlOpac }]} pointerEvents="none">
-            <View style={S.centerPlayBg}>
-              <GlassLayer borderRadius={rs(30)} alpha={0.18} />
-              <Text style={{ fontSize: rs(28), color: '#fff' }}>{paused ? '▶' : '⏸'}</Text>
+            {/* Center play/pause/replay */}
+            <View style={S.heroCenterControls}>
+              <TouchableOpacity
+                onPress={handlePlayPause}
+                activeOpacity={0.85}
+                style={S.heroCenterBtn}
+              >
+                <LinearGradient
+                  colors={['rgba(105, 97, 97, 0.14)', 'rgba(255,255,255,0.08)']}
+                  style={[StyleSheet.absoluteFill, { borderRadius: rs(36) }]}
+                />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: rs(36) }]}
+                />
+                <Text style={[S.heroCenterBtnIcon]}>
+                  {ended ? '↺' : paused ? '▶' : '⏸'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
-        )}
-      </View>
+        </View>
+      </TouchableWithoutFeedback>
 
-      {/* ── Controls bar — ALWAYS VISIBLE below video ── */}
-      <View style={S.controlsBar}>
-        {/* Glass background for controls */}
-        <LinearGradient colors={['rgba(5,18,14,0.95)', 'rgba(3,12,10,0.98)']} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(18), borderBottomRightRadius: rs(18) }]} />
-        <LinearGradient colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: rs(18), borderBottomRightRadius: rs(18) }]} />
-
-        {/* Progress row */}
-        <View style={S.progressRow}>
-          <Text style={S.timeText}>{formatTime(currentTime)}</Text>
-          <Slider
-            style={S.slider}
-            minimumValue={0}
-            maximumValue={duration || 1}
-            value={currentTime}
-            onSlidingComplete={handleSeek}
-            minimumTrackTintColor={ACCENT}
-            maximumTrackTintColor="rgba(255,255,255,0.22)"
-            thumbTintColor={ACCENT}
-          />
-          <Text style={S.timeText}>-{formatTime(remaining)}</Text>
+      {/* ── Slim progress bar + remaining time + mute (ALWAYS VISIBLE below video) ── */}
+      <View style={S.heroMiniBar}>
+        {/* Progress track */}
+        <View style={S.heroProgressTrack}>
+          <View style={[S.heroProgressFill, { width: `${progress * 100}%` }]} />
         </View>
 
-        {/* Mute / Play row */}
-        <View style={S.ctrlBtnRow}>
-          <TouchableOpacity onPress={() => setMuted(m => !m)} style={S.ctrlBtn} activeOpacity={0.8}>
-            <GlassLayer borderRadius={rs(18)} />
-            <Text style={{ fontSize: rs(14), color: '#fff' }}>{muted ? '🔇' : '🔊'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleVideoPress} style={[S.ctrlBtn, S.ctrlPlayBtn]} activeOpacity={0.8}>
-            <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-            <LinearGradient colors={['rgba(255,255,255,0.38)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-            <Text style={{ fontSize: rs(14), color: BG }}>{paused ? '▶' : '⏸'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleReplay} style={S.ctrlBtn} activeOpacity={0.8}>
-            <GlassLayer borderRadius={rs(18)} />
-            <Text style={{ fontSize: rs(14), color: '#fff' }}>↺</Text>
-          </TouchableOpacity>
+        {/* Time + Mute row */}
+        <View style={S.heroBarRow}>
+          <Text style={S.heroTimeText}>
+            {formatTime(remaining) !== '0:00' ? `-${formatTime(remaining)}` : 'Ended'}
+          </Text>
+          <View style={{ flex: 1 }} />
+          <Icona name={muted ? 'mute' : 'unmute'} size={18} color="#fff" onPress={onMuteToggle} />
         </View>
       </View>
     </View>
   );
 });
 
-// ─── Action Buttons (Like / Watchlist / Rate) ────────────────────────────────
+// ─── Action Buttons ───────────────────────────────────────────────────────────
 const ActionButtons = memo(({ movie, onLike, onWatchlist, onRate, userRating }) => {
   const [showRater, setShowRater] = useState(false);
   const raterScale = useRef(new Animated.Value(0)).current;
 
-  const toggleRater = useCallback(() => {
-    const next = !showRater;
-    setShowRater(next);
+  const toggleRater = () => {
+    const toValue = showRater ? 0 : 1;
+    setShowRater(!showRater);
     Animated.spring(raterScale, {
-      toValue: next ? 1 : 0,
+      toValue,
       useNativeDriver: true,
-      tension: 260, friction: 18,
     }).start();
-  }, [showRater]);
+  };
+
+
 
   const { anim: likeA, onIn: likeIn, onOut: likeOut } = usePressScale(0.88);
   const { anim: wlA, onIn: wlIn, onOut: wlOut } = usePressScale(0.88);
@@ -530,7 +585,6 @@ const ActionButtons = memo(({ movie, onLike, onWatchlist, onRate, userRating }) 
   return (
     <View>
       <View style={S.actionRow}>
-        {/* Like */}
         <TouchableOpacity onPress={onLike} onPressIn={likeIn} onPressOut={likeOut} activeOpacity={1}>
           <Animated.View style={[S.actionBtn, { transform: [{ scale: likeA }] }]}>
             <GlassLayer borderRadius={rs(14)} alpha={0.10} />
@@ -545,7 +599,6 @@ const ActionButtons = memo(({ movie, onLike, onWatchlist, onRate, userRating }) 
           </Animated.View>
         </TouchableOpacity>
 
-        {/* Watchlist */}
         <TouchableOpacity onPress={onWatchlist} onPressIn={wlIn} onPressOut={wlOut} activeOpacity={1}>
           <Animated.View style={[S.actionBtn, { transform: [{ scale: wlA }] }]}>
             <GlassLayer borderRadius={rs(14)} alpha={0.10} />
@@ -557,26 +610,36 @@ const ActionButtons = memo(({ movie, onLike, onWatchlist, onRate, userRating }) 
           </Animated.View>
         </TouchableOpacity>
 
-        {/* Rate */}
-        <TouchableOpacity onPress={toggleRater} onPressIn={rateIn} onPressOut={rateOut} activeOpacity={1}>
+        <TouchableOpacity onPress={toggleRater} activeOpacity={1}>
           <Animated.View style={[S.actionBtn, { transform: [{ scale: rateA }] }]}>
             <GlassLayer borderRadius={rs(14)} alpha={0.10} />
-            {userRating > 0 && <LinearGradient colors={['rgba(255,215,0,0.22)', 'rgba(255,215,0,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />}
-            <Text style={[S.actionBtnIcon, { color: userRating > 0 ? '#FFD700' : '#fff' }]}>★</Text>
-            <Text style={[S.actionBtnLabel, { color: userRating > 0 ? '#FFD700' : 'rgba(255,255,255,0.7)' }]}>
-              {userRating > 0 ? `${userRating}.0` : 'Rate'}
-            </Text>
+            <Text style={S.actionBtnIcon}>★</Text>
+            <Text style={S.actionBtnLabel}>Rate</Text>
           </Animated.View>
         </TouchableOpacity>
       </View>
 
-      {/* Rating panel */}
-      <Animated.View style={[S.ratingPanel, { transform: [{ scale: raterScale }], opacity: raterScale }]}>
-        <LinearGradient colors={['rgba(10,28,20,0.97)', 'rgba(3,15,12,0.99)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-        <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-        <Text style={S.ratingPanelTitle}>Your Rating</Text>
-        <StarRating value={userRating} onChange={(v) => { onRate(v); toggleRater(); }} />
-      </Animated.View>
+      {showRater && (
+        <Animated.View
+          style={[
+            S.ratingPanel,
+            { transform: [{ scale: raterScale }], opacity: raterScale },
+          ]}
+        >
+          <LinearGradient
+            colors={['rgba(10,28,20,0.97)', 'rgba(3,15,12,0.99)']}
+            style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]}
+          />
+          <Text style={S.ratingPanelTitle}>Your Rating</Text>
+          <StarRating
+            value={userRating}
+            onChange={(v) => {
+              onRate(v);
+              toggleRater(); // hide after rating
+            }}
+          />
+        </Animated.View>
+      )}
     </View>
   );
 });
@@ -605,7 +668,7 @@ const CastCard = memo(({ item }) => {
   );
 });
 
-// ─── Similar Movie Card (2-col) ───────────────────────────────────────────────
+// ─── Similar Movie Card ───────────────────────────────────────────────────────
 const SimilarCard = memo(({ item, onPress }) => {
   const cardW = (SW - rs(18) * 2 - rs(12)) / 2;
   const { anim, onIn, onOut } = usePressScale(0.95);
@@ -628,7 +691,7 @@ const SimilarCard = memo(({ item, onPress }) => {
               </View>
             </ImageBackground>
           ) : (
-            <View style={[S.simCardImg, { backgroundColor: 'rgba(255,255,255,0.08)', borderTopLeftRadius: rs(13), borderTopRightRadius: rs(13), alignItems: 'center', justifyContent: 'center' }]}>
+            <View style={[S.simCardImg, { backgroundColor: GLASS_BG, borderTopLeftRadius: rs(13), borderTopRightRadius: rs(13), alignItems: 'center', justifyContent: 'center' }]}>
               <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: rs(11) }}>{limitWords(item.title, 4)}</Text>
             </View>
           )}
@@ -643,36 +706,30 @@ const SimilarCard = memo(({ item, onPress }) => {
 });
 
 // ─── Comment Item ─────────────────────────────────────────────────────────────
-const CommentItem = memo(({ item, onAvatarPress }) => {
-  return (
-    <View style={S.commentItem}>
-      <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
-      <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
-
-      <TouchableOpacity onPress={() => onAvatarPress(item)} activeOpacity={0.85}>
-        <View style={S.commentAvatarWrap}>
-          <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
-          {item.avatar ? (
-            <ImageBackground source={{ uri: item.avatar }} style={S.commentAvatar} imageStyle={{ borderRadius: rs(20) }} />
-          ) : (
-            <Text style={{ color: BG, fontWeight: '900', fontSize: rs(14) }}>{(item.username || 'U')[0].toUpperCase()}</Text>
-          )}
-        </View>
-      </TouchableOpacity>
-
-      <View style={S.commentContent}>
-        <View style={S.commentHeader}>
-          <Text style={S.commentUsername}>@{item.username}</Text>
-          <Text style={S.commentTime}>{timeAgo(item.created_at)}</Text>
-        </View>
-        <Text style={S.commentText}>{item.text}</Text>
-        {item.likes > 0 && (
-          <Text style={S.commentLikes}>♥ {item.likes}</Text>
+const CommentItem = memo(({ item, onAvatarPress }) => (
+  <View style={S.commentItem}>
+    <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
+    <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
+    <TouchableOpacity onPress={() => onAvatarPress(item)} activeOpacity={0.85}>
+      <View style={S.commentAvatarWrap}>
+        <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
+        {item.avatar ? (
+          <ImageBackground source={{ uri: item.avatar }} style={S.commentAvatar} imageStyle={{ borderRadius: rs(20) }} />
+        ) : (
+          <Text style={{ color: BG, fontWeight: '900', fontSize: rs(14) }}>{(item.username || 'U')[0].toUpperCase()}</Text>
         )}
       </View>
+    </TouchableOpacity>
+    <View style={S.commentContent}>
+      <View style={S.commentHeader}>
+        <Text style={S.commentUsername}>@{item.username}</Text>
+        <Text style={S.commentTime}>{timeAgo(item.created_at)}</Text>
+      </View>
+      <Text style={S.commentText}>{item.text}</Text>
+      {item.likes > 0 && <Text style={S.commentLikes}>♥ {item.likes}</Text>}
     </View>
-  );
-});
+  </View>
+));
 
 // ─── Episode Card ─────────────────────────────────────────────────────────────
 const EpisodeCard = memo(({ item, isActive, onPress }) => {
@@ -682,10 +739,8 @@ const EpisodeCard = memo(({ item, isActive, onPress }) => {
       <Animated.View style={[S.episodeCard, isActive && S.episodeCardActive, { transform: [{ scale: anim }] }]}>
         {isActive
           ? <LinearGradient colors={[`rgba(0,255,178,0.22)`, `rgba(0,255,178,0.06)`]} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
-          : <GlassLayer borderRadius={rs(14)} alpha={0.07} />
-        }
+          : <GlassLayer borderRadius={rs(14)} alpha={0.07} />}
         <LinearGradient colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(14) }]} />
-
         {item.thumbnail_url ? (
           <ImageBackground source={{ uri: item.thumbnail_url }} style={S.episodeThumb} imageStyle={{ borderRadius: rs(10) }}>
             <LinearGradient colors={['rgba(3,15,12,0)', 'rgba(3,15,12,0.7)']} style={StyleSheet.absoluteFill} />
@@ -696,11 +751,10 @@ const EpisodeCard = memo(({ item, isActive, onPress }) => {
             )}
           </ImageBackground>
         ) : (
-          <View style={[S.episodeThumb, { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: rs(10), alignItems: 'center', justifyContent: 'center' }]}>
+          <View style={[S.episodeThumb, { backgroundColor: GLASS_BG, borderRadius: rs(10), alignItems: 'center', justifyContent: 'center' }]}>
             <Text style={{ color: ACCENT, fontSize: rs(20) }}>{isActive ? '▶' : `E${item.episode_number}`}</Text>
           </View>
         )}
-
         <View style={S.episodeInfo}>
           <Text style={S.episodeNum}>E{item.episode_number}</Text>
           <Text style={S.episodeTitle} numberOfLines={1}>{item.title}</Text>
@@ -712,7 +766,7 @@ const EpisodeCard = memo(({ item, isActive, onPress }) => {
   );
 });
 
-// ─── Section Header ───────────────────────────────────────────────────────────
+// ─── Section Title ────────────────────────────────────────────────────────────
 const SectionTitle = memo(({ title }) => (
   <View style={S.sectionHeader}>
     <View style={S.sectionBar} />
@@ -720,12 +774,19 @@ const SectionTitle = memo(({ title }) => (
   </View>
 ));
 
-// ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// ── MAIN SCREEN ───────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
 export default function MovieDetails() {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
+  // Accept full movie object OR just movieId from HomeScreen
+  //const { movieId, movie: routeMovie } = route.params || {};
   const { movieId, movie: routeMovie } = route.params || {};
+
+  //console.log('data',routeMovie)
+
   const { toast, showToast } = useToast();
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -737,21 +798,30 @@ export default function MovieDetails() {
   const [episodes, setEpisodes] = useState([]);
   const [activeSeason, setActiveSeason] = useState(null);
   const [activeEpisode, setActiveEpisode] = useState(null);
-  const [loading, setLoading] = useState(!routeMovie);
+  const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
   const [postingComment, setPostingComment] = useState(false);
   const [userRating, setUserRating] = useState(0);
-  const [activeTab, setActiveTab] = useState('similar'); // 'similar' | 'comments'
+  const [activeTab, setActiveTab] = useState('similar');
   const [currentUser, setCurrentUser] = useState(null);
   const [profileModal, setProfileModal] = useState({ visible: false, user: null });
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
-  const [videoEnded, setVideoEnded] = useState(false);
-
-  // Entrance animation
-  const entryOpac = useRef(new Animated.Value(0)).current;
-  const entryY = useRef(new Animated.Value(rs(24))).current;
+  const [muted, setMuted] = useState(false); // Netflix default: muted autoplay
+  const [headerOpac] = useState(new Animated.Value(0)); // scrolls to opaque
 
   const scrollRef = useRef(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Animated entrance
+  const entryOpac = useRef(new Animated.Value(0)).current;
+  const entryY = useRef(new Animated.Value(rs(30))).current;
+
+  // Header background opacity based on scroll (Netflix transparent → opaque)
+  const headerBg = scrollY.interpolate({
+    inputRange: [0, HERO_H * 0.4],
+    outputRange: ['rgba(3,15,12,0)', 'rgba(3,15,12,0.95)'],
+    extrapolate: 'clamp',
+  });
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -762,16 +832,32 @@ export default function MovieDetails() {
 
   const loadAll = useCallback(async () => {
     const id = movieId || routeMovie?.id;
-    if (!id) { setLoading(false); return; }
+    if (!id) {
+      // Use routeMovie data if no id (edge case)
+      const m = routeMovie || MOCK_MOVIE;
+      setMovie(m);
+      setCast(MOCK_CAST);
+      setSimilar(MOCK_SIMILAR);
+      setComments(MOCK_COMMENTS);
+      setUserRating(m.user_rating || 0);
+      setLoading(false);
+      runEntrance();
+      return;
+    }
 
     try {
-      const [user, movieData, castData, similarData, commentsData] = await Promise.all([
+      const [user, castData, similarData, commentsData] = await Promise.all([
         getCurrentUser().catch(() => null),
-        fetchMovieById(id).catch(() => null),
         fetchCastByMovieId(id).catch(() => []),
         fetchSimilarMovies(id).catch(() => []),
         fetchCommentsByMovieId(id).catch(() => []),
       ]);
+
+      // If we already have full movie data from route, use it; otherwise fetch
+      let movieData = routeMovie;
+      if (!routeMovie || !routeMovie.description) {
+        movieData = await fetchMovieById(id).catch(() => null);
+      }
 
       setCurrentUser(user);
       const m = movieData || MOCK_MOVIE;
@@ -781,7 +867,6 @@ export default function MovieDetails() {
       setComments(commentsData?.length ? commentsData : MOCK_COMMENTS);
       setUserRating(m.user_rating || 0);
 
-      // Load series data if needed
       if (m.is_series) {
         const seasonsData = await fetchSeasonsBySeriesId(id).catch(() => []);
         const sList = seasonsData?.length ? seasonsData : MOCK_SEASONS;
@@ -795,21 +880,27 @@ export default function MovieDetails() {
         }
       }
 
-      Animated.parallel([
-        Animated.timing(entryOpac, { toValue: 1, duration: 420, useNativeDriver: true }),
-        Animated.spring(entryY, { toValue: 0, useNativeDriver: true, tension: 90, friction: 18 }),
-      ]).start();
+      runEntrance();
     } catch (e) {
-      setMovie(MOCK_MOVIE);
+      setMovie(routeMovie || MOCK_MOVIE);
       setCast(MOCK_CAST);
       setSimilar(MOCK_SIMILAR);
       setComments(MOCK_COMMENTS);
+      runEntrance();
     } finally {
       setLoading(false);
     }
-  }, [movieId]);
+  }, [movieId, routeMovie]);
 
-  // ── Season switch ──────────────────────────────────────────────────────────
+
+  const runEntrance = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(entryOpac, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.spring(entryY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 16 }),
+    ]).start();
+  }, []);
+
+  // ── Season Switch ──────────────────────────────────────────────────────────
   const handleSeasonSwitch = useCallback(async (season) => {
     setActiveSeason(season);
     setEpisodes([]);
@@ -826,7 +917,7 @@ export default function MovieDetails() {
   }, []);
 
   // ── Auth Guard ─────────────────────────────────────────────────────────────
-  const requireAuth = useCallback((action) => {
+  const requireAuth = useCallback(() => {
     if (!currentUser) {
       showToast('Please log in to continue');
       setTimeout(() => navigation.navigate('ProfileTab'), 1200);
@@ -839,18 +930,10 @@ export default function MovieDetails() {
   const handleLike = useCallback(async () => {
     if (!requireAuth()) return;
     const wasLiked = movie?.user_liked;
-    setMovie(m => ({
-      ...m,
-      user_liked: !wasLiked,
-      likes_count: (m.likes_count || 0) + (wasLiked ? -1 : 1),
-    }));
+    setMovie(m => ({ ...m, user_liked: !wasLiked, likes_count: (m.likes_count || 0) + (wasLiked ? -1 : 1) }));
     showToast(wasLiked ? 'Removed from likes' : '♥ Liked!');
-    try {
-      await toggleLike(currentUser.id, movie.id);
-    } catch {
-      setMovie(m => ({ ...m, user_liked: wasLiked, likes_count: (m.likes_count || 0) + (wasLiked ? 1 : -1) }));
-      showToast('Could not update like');
-    }
+    try { await toggleLike(currentUser.id, movie.id); }
+    catch { setMovie(m => ({ ...m, user_liked: wasLiked, likes_count: (m.likes_count || 0) + (wasLiked ? 1 : -1) })); }
   }, [movie, currentUser, requireAuth]);
 
   // ── Watchlist ──────────────────────────────────────────────────────────────
@@ -859,12 +942,8 @@ export default function MovieDetails() {
     const was = movie?.user_watchlisted;
     setMovie(m => ({ ...m, user_watchlisted: !was }));
     showToast(was ? 'Removed from list' : '✓ Added to My List');
-    try {
-      await toggleWatchlist(currentUser.id, movie.id);
-    } catch {
-      setMovie(m => ({ ...m, user_watchlisted: was }));
-      showToast('Could not update list');
-    }
+    try { await toggleWatchlist(currentUser.id, movie.id); }
+    catch { setMovie(m => ({ ...m, user_watchlisted: was })); }
   }, [movie, currentUser, requireAuth]);
 
   // ── Rate ───────────────────────────────────────────────────────────────────
@@ -872,9 +951,8 @@ export default function MovieDetails() {
     if (!requireAuth()) return;
     setUserRating(val);
     showToast(`Rated ${val} ★`);
-    try {
-      await rateMovie(currentUser.id, movie.id, val);
-    } catch { showToast('Could not save rating'); }
+    try { await rateMovie(currentUser.id, movie.id, val); }
+    catch { showToast('Could not save rating'); }
   }, [movie, currentUser, requireAuth]);
 
   // ── Comment ────────────────────────────────────────────────────────────────
@@ -894,341 +972,330 @@ export default function MovieDetails() {
     setComments(c => [optimistic, ...c]);
     setCommentText('');
     Keyboard.dismiss();
-    try {
-      await postComment(currentUser.id, movie.id, commentText.trim());
-    } catch { showToast('Could not post comment'); }
+    try { await postComment(currentUser.id, movie.id, commentText.trim()); }
+    catch { showToast('Could not post comment'); }
     finally { setPostingComment(false); }
   }, [commentText, currentUser, movie, requireAuth]);
 
-  // ── Avatar tap → profile modal ─────────────────────────────────────────────
+  // ── Avatar Press → Profile Modal ───────────────────────────────────────────
   const handleAvatarPress = useCallback((comment) => {
-    const mockProfile = {
-      id: comment.user_id,
-      username: comment.username,
-      avatar: comment.avatar,
-      bio: 'Movie enthusiast 🎬',
-      followers: Math.floor(Math.random() * 2000),
-      following: Math.floor(Math.random() * 500),
-      reviews: Math.floor(Math.random() * 120),
-    };
-    setProfileModal({ visible: true, user: mockProfile });
+    setProfileModal({
+      visible: true,
+      user: {
+        id: comment.user_id,
+        username: comment.username,
+        avatar: comment.avatar,
+        bio: 'Movie enthusiast 🎬',
+        followers: Math.floor(Math.random() * 2000),
+        following: Math.floor(Math.random() * 500),
+        reviews: Math.floor(Math.random() * 120),
+      },
+    });
   }, []);
 
-  // ── Similar card press ─────────────────────────────────────────────────────
+  // ── Similar Press ──────────────────────────────────────────────────────────
   const handleSimilarPress = useCallback((item) => {
     navigation.push('MovieDetail', { movieId: item.id, movie: item });
   }, [navigation]);
 
-  // ── Navigate Player ────────────────────────────────────────────────────────
+  // ── Play ───────────────────────────────────────────────────────────────────
   const handlePlay = useCallback(() => {
-    const playId = activeEpisode ? activeEpisode.id : movie?.id;
-    navigation.navigate('Player', { movieId: playId, episodeId: activeEpisode?.id });
+    navigation.navigate('Player', { movieId: activeEpisode ? activeEpisode.id : movie?.id, episodeId: activeEpisode?.id });
   }, [movie, activeEpisode, navigation]);
 
-  // ── Bottom pad ─────────────────────────────────────────────────────────────
   const bottomPad = Math.max(insets.bottom, 12) + rs(24);
 
-  // ── Loading state ──────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <View style={S.root}>
-        <StatusBar hidden />
-        <View style={[S.backBtnWrap, { top: insets.top + rs(10) }]}>
-          <SkeletonBox width={rs(44)} height={rs(44)} borderRadius={rs(22)} />
-        </View>
-        <SkeletonBox width={SW} height={SW * 0.56} borderRadius={0} style={{ marginTop: rs(60) }} />
-        <View style={{ padding: rs(18) }}>
-          <SkeletonBox width={rs(200)} height={rs(28)} style={{ marginBottom: rs(14) }} />
-          <SkeletonBox width={SW - rs(36)} height={rs(60)} style={{ marginBottom: rs(20) }} />
-        </View>
-      </View>
-    );
-  }
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (loading) return <FullScreenShimmer />;
 
   const m = movie || MOCK_MOVIE;
-  const videoUri = activeEpisode?.video_url || m.trailer_url || m.video_url || null;
+
+  // Prefer trailer_url for autoplay, fallback to video_url, then null (shows poster)
+  const trailerUri = m.url || m.video_url || (activeEpisode?.video_url) || null;
   const posterUri = m.hero_image || m.poster;
 
   return (
     <View style={S.root}>
       <StatusBar hidden />
 
-      {/* ── 3D Glass Back Button ── */}
-      <View style={[S.backBtnWrap, { top: insets.top + rs(12) }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-          style={S.backBtn}
-        >
-          <LinearGradient
-            colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.08)']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]}
-          />
-          <LinearGradient
-            colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]}
-          />
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)']}
-            start={{ x: 0, y: 0.6 }} end={{ x: 0, y: 1 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]}
-          />
-          <Icon name="chevron-left" size={rs(20)} color="#fff" />
-        </TouchableOpacity>
-        <Text style={S.headerTitle} numberOfLines={1}>{limitWords(m.title, 4)}</Text>
-      </View>
+      {/* ── Sticky Floating Header (transparent → glass on scroll) ── */}
+      <Animated.View
+        style={[
+          S.stickyHeader,
+          { top: 0, backgroundColor: headerBg, paddingTop: insets.top + rs(10) },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={S.headerInner}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} style={S.backBtn}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.1)', 'rgba(39, 194, 197, 0.2)', 'rgba(255,255,255,0.06)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]}
+            />
+            <LinearGradient
+              colors={['rgba(40, 181, 220, 0.38)', 'rgba(18, 195, 223, 0.03)']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]}
+            />
+            <Icon name="chevron-left" size={rs(22)} color="#fff" />
+          </TouchableOpacity>
+          <Text style={S.headerTitle} numberOfLines={1}>{limitWords(m.title, 4)}</Text>
 
+        </View>
+      </Animated.View>
+
+      {/* ── Main Scroll ── */}
       <Animated.ScrollView
         ref={scrollRef}
         style={S.scroll}
         contentContainerStyle={{ paddingBottom: bottomPad }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
       >
         <Animated.View style={{ opacity: entryOpac, transform: [{ translateY: entryY }] }}>
 
-          {/* ── Video Player ── */}
-          <View style={S.videoSection}>
-            <VideoPlayer
-              uri={videoUri}
-              posterUri={posterUri}
-              onEnded={() => setVideoEnded(true)}
-            />
-          </View>
+          {/* ── Hero Trailer (edge-to-edge, no border) ── */}
+          <HeroTrailer
+            uri={trailerUri}
+            posterUri={posterUri}
+            muted={muted}
+            onMuteToggle={() => setMuted(v => !v)}
+            onEnded={() => { }}
+          />
 
-          {/* ── Play Button (Big CTA) ── */}
-          <View style={S.playBtnSection}>
-            <TouchableOpacity onPress={handlePlay} activeOpacity={0.85} style={S.bigPlayBtn}>
-              <LinearGradient colors={[ACCENT, ACCENT_DIM, '#009A6E']} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-              <LinearGradient colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-              <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.12)']} start={{ x: 0, y: 0.6 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-              {/* Ring */}
-              <View style={S.bigPlayRing} />
-              <Text style={S.bigPlayIcon}>▶</Text>
-              <Text style={S.bigPlayLabel}>
-                {activeEpisode ? `Play E${activeEpisode.episode_number}: ${activeEpisode.title}` : 'Play Now'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* ── Content starts here — overlapping the hero bottom gradient ── */}
+          <View style={S.contentContainer}>
 
-          {/* ── Movie Info Card ── */}
-          <View style={S.infoCard}>
-            {/* Glass layers */}
-            <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)', 'rgba(0,255,178,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
-            <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.38 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
-            <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.16)']} start={{ x: 0, y: 0.65 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
-            {/* Accent top glow */}
-            <LinearGradient colors={[ACCENT, ACCENT_DIM, 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={S.infoAccentLine} />
+            {/* ── Title + Genre Card (no extra margin — blends with hero) ── */}
+            <View style={S.infoCard}>
+              <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.05)', 'rgba(0,255,178,0.03)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
+              <LinearGradient colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.38 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(22) }]} />
+              <LinearGradient colors={[ACCENT, ACCENT_DIM, 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={S.infoAccentLine} />
 
-            {/* Genre badges */}
-            <View style={S.genreRow}>
-              {(m.genre || []).map(g => (
-                <View key={g} style={S.genreBadge}>
-                  <LinearGradient colors={[`rgba(0,255,178,0.22)`, 'rgba(0,255,178,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-                  <Text style={S.genreBadgeTxt}>{g}</Text>
-                </View>
-              ))}
-              {m.is_4k && (
-                <View style={[S.genreBadge, { borderColor: 'rgba(255,215,0,0.4)' }]}>
-                  <LinearGradient colors={['rgba(255,215,0,0.22)', 'rgba(255,215,0,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-                  <Text style={[S.genreBadgeTxt, { color: '#FFD700' }]}>4K</Text>
-                </View>
-              )}
-              {m.is_hdr && (
-                <View style={[S.genreBadge, { borderColor: 'rgba(255,215,0,0.4)' }]}>
-                  <LinearGradient colors={['rgba(255,215,0,0.22)', 'rgba(255,215,0,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-                  <Text style={[S.genreBadgeTxt, { color: '#FFD700' }]}>HDR</Text>
-                </View>
-              )}
+              {/* Genre badges */}
+              <View style={S.genreRow}>
+                {(m.genre || []).map(g => (
+                  <View key={g} style={S.genreBadge}>
+                    <LinearGradient colors={[`rgba(0,255,178,0.22)`, 'rgba(0,255,178,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                    <Text style={S.genreBadgeTxt}>{g}</Text>
+                  </View>
+                ))}
+                {m.newly_added && (
+                  <View style={[S.genreBadge, { borderColor: 'rgba(255,45,85,0.45)' }]}>
+                    <LinearGradient colors={['rgba(255,45,85,0.22)', 'rgba(255,45,85,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                    <Text style={[S.genreBadgeTxt, { color: '#FF2D55' }]}>{m.newly_added}</Text>
+                  </View>
+                )}
+                {m.is_4k && (
+                  <View style={[S.genreBadge, { borderColor: 'rgba(255,215,0,0.4)' }]}>
+                    <LinearGradient colors={['rgba(255,215,0,0.22)', 'rgba(255,215,0,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                    <Text style={[S.genreBadgeTxt, { color: '#FFD700' }]}>4K</Text>
+                  </View>
+                )}
+                {m.is_hdr && (
+                  <View style={[S.genreBadge, { borderColor: 'rgba(255,215,0,0.4)' }]}>
+                    <LinearGradient colors={['rgba(255,215,0,0.22)', 'rgba(255,215,0,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                    <Text style={[S.genreBadgeTxt, { color: '#FFD700' }]}>HDR</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Title */}
+              <Text style={S.infoTitle}>{limitWords(m.title, 8)}</Text>
+
+              {/* Meta row */}
+              <View style={S.metaRow}>
+                {[
+                  m.year && { icon: '📅', val: String(m.year) },
+                  m.duration && { icon: '⏱', val: m.duration },
+                  m.language && { icon: '🌐', val: m.language },
+                  m.rating && { icon: '⭐', val: Number(m.rating).toFixed(1) },
+                ].filter(Boolean).map((meta, i) => (
+                  <View key={i} style={S.metaChip}>
+                    <GlassLayer borderRadius={rs(10)} alpha={0.09} />
+                    <Text style={S.metaChipTxt}>{meta.icon}  {meta.val}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
 
-            {/* Title */}
-            <Text style={S.infoTitle}>{limitWords(m.title, 8)}</Text>
-
-            {/* Meta row */}
-            <View style={S.metaRow}>
-              {[
-                m.year && { icon: '📅', val: String(m.year) },
-                m.duration && { icon: '⏱', val: m.duration },
-                m.language && { icon: '🌐', val: m.language },
-                m.rating && { icon: '⭐', val: Number(m.rating).toFixed(1) },
-              ].filter(Boolean).map((meta, i) => (
-                <View key={i} style={S.metaChip}>
-                  <GlassLayer borderRadius={rs(10)} alpha={0.09} />
-                  <Text style={S.metaChipTxt}>{meta.icon}  {meta.val}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* ── Action Buttons ── */}
-          <View style={S.actionSection}>
-            <ActionButtons
-              movie={m}
-              onLike={handleLike}
-              onWatchlist={handleWatchlist}
-              onRate={handleRate}
-              userRating={userRating}
-            />
-          </View>
-
-          {/* ── Synopsis ── */}
-          <View style={S.synopsisCard}>
-            <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.04)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
-            <LinearGradient colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
-            <SectionTitle title="Synopsis" />
-            <Text style={S.synopsisText}>
-              {synopsisExpanded ? m.description : limitChars(m.description, 100)}
-            </Text>
-            {m.description && m.description.length > 100 && (
-              <TouchableOpacity onPress={() => setSynopsisExpanded(e => !e)} activeOpacity={0.75}>
-                <Text style={S.synopsisToggle}>{synopsisExpanded ? 'Show less ▲' : 'Read more ▼'}</Text>
+            {/* ── Big Play CTA ── */}
+            <View style={S.playBtnSection}>
+              <TouchableOpacity onPress={handlePlay} activeOpacity={0.85} style={S.bigPlayBtn}>
+                <LinearGradient colors={[ACCENT, ACCENT_DIM, '#009A6E']} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
+                <LinearGradient colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
+                <Text style={S.bigPlayIcon}>▶</Text>
+                <Text style={S.bigPlayLabel}>
+                  {activeEpisode ? `Play E${activeEpisode.episode_number}: ${activeEpisode.title}` : 'Play Now'}
+                </Text>
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
 
-          {/* ── Cast & Crew ── */}
-          {cast.length > 0 && (
-            <View style={S.section}>
-              <SectionTitle title="Cast & Crew" />
-              <FlatList
-                data={cast}
-                horizontal
-                keyExtractor={i => i.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={S.castList}
-                renderItem={({ item }) => <CastCard item={item} />}
-                getItemLayout={(_, i) => ({ length: rs(110), offset: rs(110) * i, index: i })}
-                initialNumToRender={4}
-                maxToRenderPerBatch={4}
-                windowSize={3}
-                removeClippedSubviews
+            {/* ── Action Buttons ── */}
+            <View style={S.actionSection}>
+              <ActionButtons
+                movie={m}
+                onLike={handleLike}
+                onWatchlist={handleWatchlist}
+                onRate={handleRate}
+                userRating={userRating}
               />
             </View>
-          )}
 
-          {/* ── Series: Seasons & Episodes ── */}
-          {m.is_series && seasons.length > 0 && (
-            <View style={S.seriesSection}>
-              <SectionTitle title="Episodes" />
-
-              {/* Season tabs */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.seasonTabRow}>
-                {seasons.map(s => {
-                  const isActive = activeSeason?.id === s.id;
-                  return (
-                    <TouchableOpacity key={s.id} onPress={() => handleSeasonSwitch(s)} activeOpacity={0.8} style={[S.seasonTab, isActive && S.seasonTabActive]}>
-                      {isActive
-                        ? <LinearGradient colors={[ACCENT, ACCENT_DIM]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-                        : <GlassLayer borderRadius={rs(20)} alpha={0.08} />
-                      }
-                      <LinearGradient colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
-                      <Text style={[S.seasonTabTxt, isActive && S.seasonTabTxtActive]}>Season {s.season_number}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* Episode list */}
-              {episodes.length > 0 ? (
-                episodes.map(ep => (
-                  <EpisodeCard
-                    key={ep.id}
-                    item={ep}
-                    isActive={activeEpisode?.id === ep.id}
-                    onPress={(e) => { setActiveEpisode(e); scrollRef.current?.scrollTo({ y: 0, animated: true }); }}
-                  />
-                ))
-              ) : (
-                <ActivityIndicator color={ACCENT} style={{ marginTop: rs(20) }} />
+            {/* ── Synopsis ── */}
+            <View style={S.synopsisCard}>
+              <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.04)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
+              <LinearGradient colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
+              <SectionTitle title="Synopsis" />
+              <Text style={S.synopsisText}>
+                {synopsisExpanded ? m.description : limitChars(m.description, 120)}
+              </Text>
+              {m.description && m.description.length > 120 && (
+                <TouchableOpacity onPress={() => setSynopsisExpanded(e => !e)} activeOpacity={0.75}>
+                  <Text style={S.synopsisToggle}>{synopsisExpanded ? 'Show less ▲' : 'Read more ▼'}</Text>
+                </TouchableOpacity>
               )}
             </View>
-          )}
 
-          {/* ── Tabs: More Like This / Comments ── */}
-          <View style={S.tabSection}>
-            {/* Tab headers */}
-            <View style={S.tabHeader}>
-              {[
-                { key: 'similar', label: 'More Like This' },
-                { key: 'comments', label: `Comments${comments.length ? ` (${comments.length})` : ''}` },
-              ].map(tab => (
-                <TouchableOpacity
-                  key={tab.key}
-                  onPress={() => setActiveTab(tab.key)}
-                  activeOpacity={0.8}
-                  style={[S.tab, activeTab === tab.key && S.tabActive]}
-                >
-                  {activeTab === tab.key && (
-                    <LinearGradient colors={[ACCENT, ACCENT_DIM]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={S.tabActiveBar} />
-                  )}
-                  <Text style={[S.tabTxt, activeTab === tab.key && S.tabTxtActive]}>{tab.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* ── Cast & Crew ── */}
+            {cast.length > 0 && (
+              <View style={S.section}>
+                <SectionTitle title="Cast & Crew" />
+                <FlatList
+                  data={cast}
+                  horizontal
+                  keyExtractor={i => i.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={S.castList}
+                  renderItem={({ item }) => <CastCard item={item} />}
+                  getItemLayout={(_, i) => ({ length: rs(112), offset: rs(112) * i, index: i })}
+                  initialNumToRender={4}
+                  maxToRenderPerBatch={4}
+                  windowSize={3}
+                  removeClippedSubviews
+                />
+              </View>
+            )}
 
-            {/* ── Similar ── */}
-            {activeTab === 'similar' && (
-              <View style={S.simGrid}>
-                {similar.length === 0 ? (
-                  <Text style={S.emptyTxt}>No similar titles found.</Text>
+            {/* ── Series: Seasons & Episodes ── */}
+            {m.is_series && seasons.length > 0 && (
+              <View style={S.seriesSection}>
+                <SectionTitle title="Episodes" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.seasonTabRow}>
+                  {seasons.map(s => {
+                    const isActive = activeSeason?.id === s.id;
+                    return (
+                      <TouchableOpacity key={s.id} onPress={() => handleSeasonSwitch(s)} activeOpacity={0.8} style={[S.seasonTab, isActive && S.seasonTabActive]}>
+                        {isActive
+                          ? <LinearGradient colors={[ACCENT, ACCENT_DIM]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                          : <GlassLayer borderRadius={rs(20)} alpha={0.08} />}
+                        <LinearGradient colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(20) }]} />
+                        <Text style={[S.seasonTabTxt, isActive && S.seasonTabTxtActive]}>Season {s.season_number}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {episodes.length > 0 ? (
+                  episodes.map(ep => (
+                    <EpisodeCard
+                      key={ep.id}
+                      item={ep}
+                      isActive={activeEpisode?.id === ep.id}
+                      onPress={(e) => { setActiveEpisode(e); scrollRef.current?.scrollTo({ y: 0, animated: true }); }}
+                    />
+                  ))
                 ) : (
-                  <>
-                    {Array.from({ length: Math.ceil(similar.length / 2) }, (_, i) => (
+                  <ActivityIndicator color={ACCENT} style={{ marginTop: rs(20) }} />
+                )}
+              </View>
+            )}
+
+            {/* ── Tabs: More Like This / Comments ── */}
+            <View style={S.tabSection}>
+              <View style={S.tabHeader}>
+                {[
+                  { key: 'similar', label: 'More Like This' },
+                  { key: 'comments', label: `Comments${comments.length ? ` (${comments.length})` : ''}` },
+                ].map(tab => (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => setActiveTab(tab.key)}
+                    activeOpacity={0.8}
+                    style={[S.tab, activeTab === tab.key && S.tabActive]}
+                  >
+                    {activeTab === tab.key && (
+                      <LinearGradient colors={[ACCENT, ACCENT_DIM]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={S.tabActiveBar} />
+                    )}
+                    <Text style={[S.tabTxt, activeTab === tab.key && S.tabTxtActive]}>{tab.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Similar Grid */}
+              {activeTab === 'similar' && (
+                <View style={S.simGrid}>
+                  {similar.length === 0 ? (
+                    <Text style={S.emptyTxt}>No similar titles found.</Text>
+                  ) : (
+                    Array.from({ length: Math.ceil(similar.length / 2) }, (_, i) => (
                       <View key={i} style={S.simRow}>
                         {similar.slice(i * 2, i * 2 + 2).map(item => (
                           <SimilarCard key={item.id} item={item} onPress={handleSimilarPress} />
                         ))}
                       </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            )}
+                    ))
+                  )}
+                </View>
+              )}
 
-            {/* ── Comments ── */}
-            {activeTab === 'comments' && (
-              <View style={S.commentsSection}>
-                {/* Comment input */}
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                  <View style={S.commentInputWrap}>
-                    <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-                    <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
-                    <TextInput
-                      style={S.commentInput}
-                      placeholder={currentUser ? 'Add a comment…' : 'Log in to comment…'}
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      value={commentText}
-                      onChangeText={setCommentText}
-                      multiline
-                      onFocus={() => { if (!currentUser) { showToast('Please log in to comment'); navigation.navigate('ProfileTab'); } }}
-                    />
-                    <TouchableOpacity
-                      onPress={handlePostComment}
-                      disabled={postingComment || !commentText.trim()}
-                      activeOpacity={0.8}
-                      style={[S.commentSendBtn, (!commentText.trim() || postingComment) && { opacity: 0.4 }]}
-                    >
-                      <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
-                      {postingComment ? <ActivityIndicator color={BG} size="small" /> : <Text style={S.commentSendTxt}>↑</Text>}
-                    </TouchableOpacity>
-                  </View>
-                </KeyboardAvoidingView>
+              {/* Comments */}
+              {activeTab === 'comments' && (
+                <View style={S.commentsSection}>
+                  <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                    <View style={S.commentInputWrap}>
+                      <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)']} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
+                      <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={[StyleSheet.absoluteFill, { borderRadius: rs(16) }]} />
+                      <TextInput
+                        style={S.commentInput}
+                        placeholder={currentUser ? 'Add a comment…' : 'Log in to comment…'}
+                        placeholderTextColor="rgba(255,255,255,0.35)"
+                        value={commentText}
+                        onChangeText={setCommentText}
+                        multiline
+                        onFocus={() => {
+                          if (!currentUser) {
+                            showToast('Please log in to comment');
+                            navigation.navigate('ProfileTab');
+                          }
+                        }}
+                      />
+                      <TouchableOpacity
+                        onPress={handlePostComment}
+                        disabled={postingComment || !commentText.trim()}
+                        activeOpacity={0.8}
+                        style={[S.commentSendBtn, (!commentText.trim() || postingComment) && { opacity: 0.4 }]}
+                      >
+                        <LinearGradient colors={[ACCENT, ACCENT_DIM]} style={[StyleSheet.absoluteFill, { borderRadius: rs(18) }]} />
+                        {postingComment ? <ActivityIndicator color={BG} size="small" /> : <Text style={S.commentSendTxt}>↑</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </KeyboardAvoidingView>
+                  {comments.length === 0 ? (
+                    <Text style={S.emptyTxt}>Be the first to comment!</Text>
+                  ) : (
+                    comments.map(c => <CommentItem key={c.id} item={c} onAvatarPress={handleAvatarPress} />)
+                  )}
+                </View>
+              )}
+            </View>
 
-                {/* Comment list */}
-                {comments.length === 0 ? (
-                  <Text style={S.emptyTxt}>Be the first to comment!</Text>
-                ) : (
-                  comments.map(c => (
-                    <CommentItem key={c.id} item={c} onAvatarPress={handleAvatarPress} />
-                  ))
-                )}
-              </View>
-            )}
-          </View>
-
+          </View>{/* end contentContainer */}
         </Animated.View>
       </Animated.ScrollView>
 
@@ -1250,141 +1317,117 @@ const S = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   scroll: { flex: 1 },
 
-  // Back button
-  backBtnWrap: {
-    position: 'absolute', left: rs(14), zIndex: 200,
-    flexDirection: 'row', alignItems: 'center', gap: rs(10),
+  // ── Sticky Header (floats over hero) ──
+  stickyHeader: {
+    position: 'absolute', left: 0, right: 0, zIndex: 300,
+    paddingBottom: rs(10),
+  },
+  headerInner: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: rs(14), gap: rs(10),
   },
   backBtn: {
-    width: rs(42), height: rs(42), borderRadius: rs(21),
+    width: rs(40), height: rs(40), borderRadius: rs(21),
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.32)',
-    shadowColor: 'rgba(0,255,178,0.25)',
-    shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 1, shadowRadius: rs(12),
-    elevation: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
+    shadowColor: 'rgba(0,255,178,0.20)',
+    shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 1, shadowRadius: rs(10),
+    elevation: 10,
   },
   headerTitle: {
-    color: 'rgba(255,255,255,0.80)', fontSize: rs(13), fontWeight: '700',
-    letterSpacing: 0.3, maxWidth: SW * 0.55,
+    flex: 1, color: 'rgba(255,255,255,0.85)',
+    fontSize: rs(14), fontWeight: '700', letterSpacing: 0.3,
+  },
+  headerShareBtn: {
+    width: rs(38), height: rs(38), borderRadius: rs(19),
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', backgroundColor: 'rgba(224, 17, 17, 0.06)',
+    borderWidth: 1, borderColor: GLASS_BORDER,
   },
 
-  // Video
-  videoSection: {
-    marginTop: rs(72),
-    marginHorizontal: rs(14),
+  // ── Hero Trailer ──
+  heroWrap: {
+    width: SW,
   },
-  videoWrap: {
-    borderRadius: rs(18), overflow: 'hidden',
-    borderWidth: 1.5, borderColor: GLASS_BORDER,
-    shadowColor: 'rgba(0,255,178,0.22)',
-    shadowOffset: { width: 0, height: rs(6) }, shadowOpacity: 1, shadowRadius: rs(18),
-    elevation: 18,
-    // Controls bar will be outside this
-  },
-  videoInner: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  videoLoadingOverlay: {
+  heroLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  replayOverlay: {
+  heroControlsOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  replayBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: rs(8),
-    paddingHorizontal: rs(28), paddingVertical: rs(14),
-    borderRadius: rs(40), overflow: 'hidden',
-    borderWidth: 1.5, borderColor: ACCENT,
-    shadowColor: ACCENT, shadowOpacity: 0.6, shadowRadius: rs(16),
-    elevation: 14,
-  },
-  replayIcon: { color: BG, fontSize: rs(22), fontWeight: '900' },
-  replayTxt: { color: BG, fontSize: rs(16), fontWeight: '800', letterSpacing: 0.5 },
-  centerPlayIcon: {
-    position: 'absolute', top: '35%', alignSelf: 'center',
-  },
-  centerPlayBg: {
-    width: rs(58), height: rs(58), borderRadius: rs(29),
+  heroCenterControls: {
     alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
   },
-
-  // Controls bar
-  controlsBar: {
-    paddingHorizontal: rs(12), paddingTop: rs(8), paddingBottom: rs(10),
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden',
-  },
-  progressRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rs(6),
-  },
-  timeText: { color: 'rgba(255,255,255,0.60)', fontSize: rs(10), fontWeight: '600', minWidth: rs(32), textAlign: 'center' },
-  slider: { flex: 1, height: rs(24) },
-  ctrlBtnRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: rs(14), marginTop: rs(4),
-  },
-  ctrlBtn: {
-    width: rs(36), height: rs(36), borderRadius: rs(18),
+  heroCenterBtn: {
+    width: rs(52), height: rs(52), borderRadius: rs(36),
     alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden', borderWidth: 1, borderColor: GLASS_BORDER,
-  },
-  ctrlPlayBtn: {
-    width: rs(44), height: rs(44), borderRadius: rs(22),
-    borderColor: ACCENT,
-    shadowColor: ACCENT, shadowOpacity: 0.5, shadowRadius: rs(10),
-    elevation: 8,
-  },
-
-  // Play button (CTA)
-  playBtnSection: { marginHorizontal: rs(14), marginTop: rs(16) },
-  bigPlayBtn: {
-    height: rs(54), borderRadius: rs(16),
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 1.5, borderColor: ACCENT,
-    gap: rs(10),
-    shadowColor: ACCENT, shadowOpacity: 0.5, shadowRadius: rs(16),
-    elevation: 14,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: ACCENT, shadowOpacity: 0.6, shadowRadius: rs(20),
+    elevation: 20,
   },
-  bigPlayRing: {
-    position: 'absolute', left: rs(18),
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.22)',
-    borderTopColor: 'rgba(255,255,255,0.35)',
+  heroCenterBtnIcon: {
+    fontSize: rs(33), color: 'white', fontWeight: '900',
   },
-  bigPlayIcon: { color: BG, fontSize: rs(18), fontWeight: '900' },
-  bigPlayLabel: { color: BG, fontSize: rs(15), fontWeight: '800', letterSpacing: 0.5 },
 
-  // Info card
+  // ── Slim mini-bar (always visible) ──
+  heroMiniBar: {
+    paddingHorizontal: rs(16),
+    paddingTop: rs(8),
+    paddingBottom: rs(6),
+    backgroundColor: 'rgba(3,15,12,0.6)',
+  },
+  heroProgressTrack: {
+    height: rs(3), backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: rs(2), overflow: 'hidden', marginBottom: rs(8),
+  },
+  heroProgressFill: {
+    height: '100%',
+    backgroundColor: ACCENT,
+    borderRadius: rs(2),
+    shadowColor: ACCENT, shadowOpacity: 0.9, shadowRadius: rs(6),
+  },
+  heroBarRow: {
+    flexDirection: 'row', alignItems: 'center',
+  },
+  heroTimeText: {
+    color: 'rgba(255,255,255,0.55)', fontSize: rs(11), fontWeight: '600',
+  },
+  heroMuteIcon: { fontSize: rs(18) },
+
+  // ── Content ──
+  contentContainer: {
+    marginTop: rs(-rs(8)), // slight overlap with hero bottom
+  },
+
+  // ── Info Card ──
   infoCard: {
-    marginHorizontal: rs(14), marginTop: rs(18),
+    marginHorizontal: rs(14),
+    marginTop: rs(10),
     borderRadius: rs(22), overflow: 'hidden',
     borderWidth: 1, borderColor: GLASS_BORDER,
     padding: rs(18),
-    shadowColor: 'rgba(0,255,178,0.14)',
+    shadowColor: 'rgba(0,255,178,0.12)',
     shadowOffset: { width: 0, height: rs(6) }, shadowOpacity: 1, shadowRadius: rs(18),
     elevation: 12,
   },
   infoAccentLine: {
     position: 'absolute', top: 0, left: 0, right: 0, height: rs(1.5),
   },
-  genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rs(7), marginBottom: rs(12) },
+  genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rs(6), marginBottom: rs(12) },
   genreBadge: {
     paddingHorizontal: rs(12), paddingVertical: rs(5),
     borderRadius: rs(20), overflow: 'hidden',
-    borderWidth: 1, borderColor: `rgba(0,255,178,0.30)`,
+    borderWidth: 1, borderColor: `rgba(0,255,178,0.28)`,
   },
   genreBadgeTxt: { color: ACCENT, fontSize: rs(10), fontWeight: '800', letterSpacing: 0.6 },
   infoTitle: {
-    color: '#fff', fontSize: rs(26), fontWeight: '900',
-    letterSpacing: -0.5, lineHeight: rs(32), marginBottom: rs(14),
+    color: '#fff', fontSize: rs(27), fontWeight: '900',
+    letterSpacing: -0.5, lineHeight: rs(34), marginBottom: rs(14),
     textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: rs(2) }, textShadowRadius: rs(8),
   },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rs(8) },
@@ -1395,11 +1438,28 @@ const S = StyleSheet.create({
   },
   metaChipTxt: { color: 'rgba(255,255,255,0.75)', fontSize: rs(11), fontWeight: '600' },
 
-  // Action buttons
+  // ── Play CTA ──
+  playBtnSection: { marginHorizontal: rs(14), marginTop: rs(14) },
+  bigPlayBtn: {
+    height: rs(45), borderRadius: rs(16),
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5, borderColor: ACCENT,
+    gap: rs(10),
+    shadowColor: ACCENT, shadowOpacity: 0.45, shadowRadius: rs(16),
+    elevation: 14,
+  },
+  bigPlayIcon: { color: BG, fontSize: rs(18), fontWeight: '900' },
+  bigPlayLabel: { color: BG, fontSize: rs(15), fontWeight: '800', letterSpacing: 0.5 },
+
+  // ── Action Buttons ──
   actionSection: { marginHorizontal: rs(14), marginTop: rs(14) },
-  actionRow: { flexDirection: 'row', gap: rs(10) },
+  actionRow: {
+    flexDirection: 'row', paddingHorizontal: rs(20),
+    gap: rs(20), justifyContent: 'space-between'
+  },
   actionBtn: {
-    flex: 1, paddingVertical: rs(14), paddingHorizontal: rs(8),
+    flex: 1, paddingVertical: rs(14), paddingHorizontal: rs(18),
     borderRadius: rs(14), overflow: 'hidden',
     borderWidth: 1, borderColor: GLASS_BORDER,
     alignItems: 'center', gap: rs(4),
@@ -1407,8 +1467,6 @@ const S = StyleSheet.create({
   actionBtnIcon: { fontSize: rs(20), color: '#fff' },
   actionBtnLabel: { color: 'rgba(255,255,255,0.7)', fontSize: rs(11), fontWeight: '700' },
   actionBtnCount: { color: 'rgba(255,255,255,0.4)', fontSize: rs(9), fontWeight: '600' },
-
-  // Rating panel
   ratingPanel: {
     marginTop: rs(10), padding: rs(16),
     borderRadius: rs(16), overflow: 'hidden',
@@ -1417,9 +1475,9 @@ const S = StyleSheet.create({
   },
   ratingPanelTitle: { color: 'rgba(255,255,255,0.65)', fontSize: rs(11), fontWeight: '700', letterSpacing: 0.5 },
 
-  // Synopsis
+  // ── Synopsis ──
   synopsisCard: {
-    marginHorizontal: rs(14), marginTop: rs(14),
+    marginHorizontal: rs(14), marginTop: rs(15),
     borderRadius: rs(18), overflow: 'hidden',
     borderWidth: 1, borderColor: GLASS_BORDER,
     padding: rs(16),
@@ -1427,7 +1485,7 @@ const S = StyleSheet.create({
   synopsisText: { color: 'rgba(255,255,255,0.72)', fontSize: rs(13), lineHeight: rs(21), marginTop: rs(6) },
   synopsisToggle: { color: ACCENT, fontSize: rs(12), fontWeight: '700', marginTop: rs(8) },
 
-  // Section
+  // ── Section ──
   section: { marginTop: rs(22) },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: rs(14), marginBottom: rs(12) },
   sectionBar: {
@@ -1437,27 +1495,27 @@ const S = StyleSheet.create({
   },
   sectionTitle: { color: '#fff', fontSize: rs(17), fontWeight: '800', letterSpacing: 0.2 },
 
-  // Cast
+  // ── Cast ──
   castList: { paddingHorizontal: rs(14), gap: rs(12) },
   castCard: {
-    width: rs(96), borderRadius: rs(16), overflow: 'hidden',
+    width: rs(98), borderRadius: rs(16), overflow: 'hidden',
     borderWidth: 1, borderColor: GLASS_BORDER,
     padding: rs(10), alignItems: 'center', gap: rs(7),
-    shadowColor: 'rgba(0,255,178,0.12)',
+    shadowColor: 'rgba(0,255,178,0.10)',
     shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 1, shadowRadius: rs(10),
     elevation: 8,
   },
   castAvatarWrap: {
-    width: rs(66), height: rs(66), borderRadius: rs(33),
+    width: rs(68), height: rs(68), borderRadius: rs(34),
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     borderWidth: 2, borderColor: ACCENT,
-    shadowColor: ACCENT, shadowOpacity: 0.4, shadowRadius: rs(10),
+    shadowColor: ACCENT, shadowOpacity: 0.35, shadowRadius: rs(10),
   },
-  castAvatar: { width: rs(62), height: rs(62), borderRadius: rs(31) },
+  castAvatar: { width: rs(64), height: rs(64), borderRadius: rs(32) },
   castName: { color: '#fff', fontSize: rs(10), fontWeight: '800', textAlign: 'center', lineHeight: rs(14) },
   castCharacter: { color: ACCENT, fontSize: rs(9), fontWeight: '600', textAlign: 'center', letterSpacing: 0.4, textTransform: 'uppercase' },
 
-  // Series
+  // ── Series ──
   seriesSection: { marginTop: rs(22) },
   seasonTabRow: { paddingHorizontal: rs(14), gap: rs(8), marginBottom: rs(12) },
   seasonTab: {
@@ -1488,7 +1546,7 @@ const S = StyleSheet.create({
   episodeDuration: { color: 'rgba(255,255,255,0.45)', fontSize: rs(10), fontWeight: '600', marginBottom: rs(3) },
   episodeDesc: { color: 'rgba(255,255,255,0.50)', fontSize: rs(10), lineHeight: rs(14) },
 
-  // Tabs
+  // ── Tabs ──
   tabSection: { marginTop: rs(22) },
   tabHeader: { flexDirection: 'row', paddingHorizontal: rs(14), borderBottomWidth: 1, borderBottomColor: GLASS_BORDER, marginBottom: rs(16) },
   tab: { flex: 1, paddingVertical: rs(12), alignItems: 'center', position: 'relative' },
@@ -1497,11 +1555,11 @@ const S = StyleSheet.create({
   tabTxt: { color: 'rgba(255,255,255,0.45)', fontSize: rs(13), fontWeight: '700' },
   tabTxtActive: { color: ACCENT },
 
-  // Similar grid
+  // ── Similar ──
   simGrid: { paddingHorizontal: rs(14) },
   simRow: { flexDirection: 'row', gap: rs(12) },
   simCardInner: { overflow: 'hidden', backgroundColor: BG },
-  simCardImg: { width: '100%', height: rs(160) },
+  simCardImg: { width: '100%', height: rs(165) },
   simSeriesBadge: {
     position: 'absolute', top: rs(6), left: rs(6),
     paddingHorizontal: rs(6), paddingVertical: rs(2), borderRadius: rs(4), overflow: 'hidden',
@@ -1514,13 +1572,11 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.28)',
   },
   simRatingTxt: { color: '#FFD700', fontSize: rs(9), fontWeight: '700' },
-  simCardInfo: {
-    paddingHorizontal: rs(8), paddingVertical: rs(8), overflow: 'hidden',
-  },
+  simCardInfo: { paddingHorizontal: rs(8), paddingVertical: rs(8), overflow: 'hidden' },
   simCardTitle: { color: '#fff', fontSize: rs(11), fontWeight: '700' },
   emptyTxt: { color: 'rgba(255,255,255,0.4)', fontSize: rs(13), textAlign: 'center', marginTop: rs(20), marginBottom: rs(10) },
 
-  // Comments
+  // ── Comments ──
   commentsSection: { paddingHorizontal: rs(14) },
   commentInputWrap: {
     flexDirection: 'row', alignItems: 'center', gap: rs(10),
@@ -1530,8 +1586,7 @@ const S = StyleSheet.create({
   },
   commentInput: {
     flex: 1, color: '#fff', fontSize: rs(13), fontWeight: '500',
-    maxHeight: rs(80), minHeight: rs(36),
-    paddingVertical: 0,
+    maxHeight: rs(80), minHeight: rs(36), paddingVertical: 0,
   },
   commentSendBtn: {
     width: rs(36), height: rs(36), borderRadius: rs(18),
@@ -1549,8 +1604,7 @@ const S = StyleSheet.create({
   commentAvatarWrap: {
     width: rs(42), height: rs(42), borderRadius: rs(21),
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-    borderWidth: 1.5, borderColor: ACCENT,
-    flexShrink: 0,
+    borderWidth: 1.5, borderColor: ACCENT, flexShrink: 0,
   },
   commentAvatar: { width: rs(40), height: rs(40), borderRadius: rs(20) },
   commentContent: { flex: 1 },
@@ -1560,7 +1614,7 @@ const S = StyleSheet.create({
   commentText: { color: 'rgba(255,255,255,0.80)', fontSize: rs(12), lineHeight: rs(18) },
   commentLikes: { color: 'rgba(255,100,120,0.70)', fontSize: rs(10), fontWeight: '700', marginTop: rs(5) },
 
-  // User profile modal
+  // ── Profile Modal ──
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.72)',
     alignItems: 'center', justifyContent: 'center',
@@ -1569,17 +1623,17 @@ const S = StyleSheet.create({
     width: SW - rs(48), borderRadius: rs(24),
     overflow: 'hidden', borderWidth: 1, borderColor: GLASS_BORDER,
     padding: rs(24), alignItems: 'center',
-    shadowColor: ACCENT, shadowOpacity: 0.25, shadowRadius: rs(30), elevation: 24,
+    shadowColor: ACCENT, shadowOpacity: 0.22, shadowRadius: rs(30), elevation: 24,
   },
   modalAccentLine: { position: 'absolute', top: 0, left: 0, right: 0, height: rs(2) },
   modalAvatarWrap: {
-    width: rs(88), height: rs(88), borderRadius: rs(44),
+    width: rs(90), height: rs(90), borderRadius: rs(45),
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     borderWidth: 2.5, borderColor: ACCENT,
     marginBottom: rs(12),
     shadowColor: ACCENT, shadowOpacity: 0.5, shadowRadius: rs(14), elevation: 12,
   },
-  modalAvatar: { width: rs(84), height: rs(84), borderRadius: rs(42) },
+  modalAvatar: { width: rs(86), height: rs(86), borderRadius: rs(43) },
   modalAvatarInitial: { color: BG, fontSize: rs(30), fontWeight: '900' },
   modalOnlineDot: {
     position: 'absolute', bottom: rs(4), right: rs(4),
@@ -1589,7 +1643,7 @@ const S = StyleSheet.create({
   },
   modalUsername: { color: '#fff', fontSize: rs(18), fontWeight: '900', marginBottom: rs(6) },
   modalBio: { color: 'rgba(255,255,255,0.55)', fontSize: rs(12), textAlign: 'center', lineHeight: rs(18), marginBottom: rs(16) },
-  modalStats: { flexDirection: 'row', gap: rs(20), marginBottom: rs(22) },
+  modalStats: { flexDirection: 'row', gap: rs(22), marginBottom: rs(22) },
   modalStatItem: { alignItems: 'center', gap: rs(3) },
   modalStatVal: { color: ACCENT, fontSize: rs(18), fontWeight: '900' },
   modalStatLabel: { color: 'rgba(255,255,255,0.45)', fontSize: rs(10), fontWeight: '600', letterSpacing: 0.5 },
@@ -1600,7 +1654,7 @@ const S = StyleSheet.create({
   },
   modalCloseTxt: { color: 'rgba(255,255,255,0.7)', fontSize: rs(13), fontWeight: '700' },
 
-  // Toast
+  // ── Toast ──
   toast: {
     position: 'absolute', bottom: rs(36), alignSelf: 'center',
     paddingHorizontal: rs(20), paddingVertical: rs(12),
